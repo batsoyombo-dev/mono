@@ -1,0 +1,12 @@
+{
+    "$schema": "https://json.schemastore.org/tsconfig",
+    "extends": "./base.json",
+    "compilerOptions": {
+        "module": "ESNext",
+        "moduleResolution": "Bundler",
+        "jsx": "preserve",
+        "noEmit": true
+    },
+    "include": ["src", "elysia.config.ts", "bun.*.ts", "**/*.ts", "**/*.tsx"],
+    "exclude": ["node_modules", "dist", "build"]
+}

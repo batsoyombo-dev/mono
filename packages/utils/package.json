@@ -1,5 +1,5 @@
 {
-    "name": "web",
+    "name": "@mono/utils",
     "version": "1.0.0",
     "type": "module",
     "scripts": {
@@ -7,10 +7,16 @@
         "lint": "eslint . --fix",
         "pre-commit": "bunx lint-staged"
     },
-    "dependencies": {},
+    "dependencies": {
+        "date-fns": "^4.1.0",
+        "numeral": "^2.0.6",
+        "zod": "^4.3.6"
+    },
     "devDependencies": {
         "@mono/eslint-config": "*",
         "@mono/typescript-config": "*",
+        "@types/numeral": "^2.0.5",
+        "bunchee": "^6.10.0",
         "typescript": "^6.0.3"
     },
     "lint-staged": {
