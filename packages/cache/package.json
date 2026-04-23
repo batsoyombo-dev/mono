@@ -1,0 +1,24 @@
+{
+    "name": "@mono/cache",
+    "version": "0.0.0",
+    "type": "module",
+    "private": true,
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "scripts": {
+        "build": "bunchee",
+        "dev": "bunchee --watch",
+        "lint": "eslint . --fix",
+        "pre-commit": "bunx lint-staged"
+    },
+    "devDependencies": {
+        "@mono/eslint-config": "*",
+        "@mono/typescript-config": "*",
+        "bunchee": "^6.10.0",
+        "typescript": "^6.0.3"
+    },
+    "dependencies": {
+        "redis": "^5.5.6",
+        "@mono/global-config": "*"
+    }
+}

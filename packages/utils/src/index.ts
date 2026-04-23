@@ -7,3 +7,4 @@ export * from "./number";
 export * from "./object";
 export * from "./pagination";
 export * from "./string";
+export * from "./types";

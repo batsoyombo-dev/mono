@@ -1,5 +1,5 @@
 {
-    "extends": "@mono/typescript-config/vite.json",
+    "extends": "@mono/typescript-config/node.json",
     "compilerOptions": {},
     "include": ["src"],
     "exclude": ["node_modules", "dist"]
