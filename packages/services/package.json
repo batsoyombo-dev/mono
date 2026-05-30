@@ -1,0 +1,25 @@
+{
+    "name": "@mono/services",
+    "version": "1.0.0",
+    "type": "module",
+    "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "scripts": {
+        "test": "echo \"Error: no test specified\" && exit 1",
+        "lint": "eslint . --fix",
+        "pre-commit": "bunx lint-staged"
+    },
+    "dependencies": {
+        "@mono/global-config": "*",
+        "@mono/utils": "*",
+        "@mono/database": "*",
+        "zod": "catalog:"
+    },
+    "devDependencies": {
+        "@mono/eslint-config": "*",
+        "@mono/typescript-config": "*"
+    },
+    "lint-staged": {
+        "*.{js,ts,tsx}": "bun run lint"
+    }
+}
