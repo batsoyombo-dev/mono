@@ -1,0 +1,20 @@
+{
+    "name": "@mono/logger",
+    "version": "0.0.0",
+    "type": "module",
+    "private": true,
+    "main": "./src/index.ts",
+    "types": "./src/index.ts",
+    "scripts": {
+        "lint": "eslint . --fix",
+        "pre-commit": "bunx lint-staged"
+    },
+    "devDependencies": {
+        "@mono/eslint-config": "*",
+        "@mono/typescript-config": "*"
+    },
+    "dependencies": {
+        "@mono/global-config": "*",
+        "winston": "^3.19.0"
+    }
+}
