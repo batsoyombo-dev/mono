@@ -10,8 +10,7 @@
     "dependencies": {},
     "devDependencies": {
         "@mono/eslint-config": "*",
-        "@mono/typescript-config": "*",
-        "typescript": "^6.0.3"
+        "@mono/typescript-config": "*"
     },
     "lint-staged": {
         "*.{js,ts,tsx}": "bun run lint"

@@ -1,5 +1,3 @@
-import { CITY_MAP, DISTRIC_MAP } from "./constants";
-
 /**
  * Receives the original slug and a function to check if it exists in DB
  */
@@ -13,14 +11,6 @@ export async function makeUniqueSlug(
         slug = `${base}-${counter++}`;
     }
     return slug;
-}
-
-export function getDistrictLabel(district: string) {
-    return DISTRIC_MAP[district] || "";
-}
-
-export function getCityLabel(city: string) {
-    return CITY_MAP[city] || "";
 }
 
 export function randomString(length: number): string {

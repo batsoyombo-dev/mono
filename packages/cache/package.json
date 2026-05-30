@@ -3,22 +3,18 @@
     "version": "0.0.0",
     "type": "module",
     "private": true,
-    "main": "dist/index.js",
-    "types": "dist/index.d.ts",
+    "main": "./src/index.ts",
+    "types": "./src/index.ts",
     "scripts": {
-        "build": "bunchee",
-        "dev": "bunchee --watch",
         "lint": "eslint . --fix",
         "pre-commit": "bunx lint-staged"
     },
     "devDependencies": {
         "@mono/eslint-config": "*",
-        "@mono/typescript-config": "*",
-        "bunchee": "^6.10.0",
-        "typescript": "^6.0.3"
+        "@mono/typescript-config": "*"
     },
     "dependencies": {
-        "redis": "^5.5.6",
-        "@mono/global-config": "*"
+        "@mono/global-config": "*",
+        "redis": "^6.0.0"
     }
 }
