@@ -3,7 +3,7 @@
     "version": "1.0.0",
     "type": "module",
     "scripts": {
-        "dev": "bun run src/index.ts",
+        "dev": "bun --watch src/index.ts",
         "test": "echo \"Error: no test specified\" && exit 1",
         "lint": "eslint . --fix",
         "pre-commit": "bunx lint-staged"
@@ -15,7 +15,8 @@
         "@mono/services": "*",
         "@mono/utils": "*",
         "eventemitter3": "^5.0.4",
-        "node-cron": "^4.2.1"
+        "node-cron": "^4.2.1",
+        "dotenv": "catalog:"
     },
     "devDependencies": {
         "@mono/eslint-config": "*",

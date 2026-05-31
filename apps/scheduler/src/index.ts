@@ -1,5 +1,6 @@
 import { AppError, errorHandler } from "@mono/error-handling";
 import { logger } from "@mono/logger";
+import "dotenv/config";
 
 import { startSchedulerService } from "./start";
 

@@ -3,20 +3,25 @@
     "version": "1.0.0",
     "type": "module",
     "scripts": {
+        "dev": "bun run src/index.ts",
         "test": "echo \"Error: no test specified\" && exit 1",
         "lint": "eslint . --fix",
         "pre-commit": "bunx lint-staged"
     },
     "dependencies": {
-        "@mono/services": "*",
+        "@mono/error-handling": "*",
         "@mono/global-config": "*",
         "@mono/logger": "*",
-        "@mono/error-handling": "*",
-        "@mono/utils": "*"
+        "@mono/services": "*",
+        "@mono/utils": "*",
+        "bullmq": "catalog:",
+        "dotenv": "catalog:",
+        "minimist": "^1.2.8"
     },
     "devDependencies": {
         "@mono/eslint-config": "*",
-        "@mono/typescript-config": "*"
+        "@mono/typescript-config": "*",
+        "@types/minimist": "^1.2.5"
     },
     "lint-staged": {
         "*.{js,ts,tsx}": "bun run lint"

@@ -17,6 +17,7 @@
         "@mono/logger": "*",
         "@mono/utils": "*",
         "@types/nodemailer": "^8.0.0",
+        "bullmq": "catalog:",
         "handlebars": "^4.7.9",
         "i": "^0.3.7",
         "nodemailer": "^8.0.10",

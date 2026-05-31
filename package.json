@@ -7,7 +7,9 @@
         "typescript": "^6.0.3"
     },
     "catalog": {
-        "zod": "^4.3.6"
+        "zod": "^4.3.6",
+        "bullmq": "^5.77.6",
+        "dotenv": "^17.4.2"
     },
     "engines": {
         "node": ">=24"
@@ -17,6 +19,7 @@
     "scripts": {
         "build": "turbo run build",
         "dev": "turbo run dev",
+        "dev:mq-worker": "turbo run dev --filter='mq-worker'",
         "db:generate": "turbo run db:generate",
         "db:migrate": "turbo run db:migrate",
         "lint": "turbo run lint",

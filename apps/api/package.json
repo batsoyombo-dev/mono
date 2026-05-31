@@ -4,7 +4,7 @@
     "type": "module",
     "scripts": {
         "test": "echo \"Error: no test specified\" && exit 1",
-        "dev": "bun run src/index.ts",
+        "dev": "bun --watch src/index.ts",
         "lint": "eslint . --fix",
         "pre-commit": "bunx lint-staged"
     },
@@ -14,7 +14,8 @@
         "@mono/cache": "*",
         "@mono/error-handling": "*",
         "@mono/logger": "*",
-        "@mono/utils": "*"
+        "@mono/utils": "*",
+        "dotenv": "catalog:"
     },
     "devDependencies": {
         "@mono/eslint-config": "*",

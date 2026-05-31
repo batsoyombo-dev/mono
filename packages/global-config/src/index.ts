@@ -1,12 +1,4 @@
-import path from "path";
-import { fileURLToPath } from "url";
-
-import dotenv from "dotenv";
 import { z } from "zod";
-
-// eslint-disable-next-line turbo/no-undeclared-env-vars
-const envFile = `../../../.env.${process.env.NODE_ENV || "development"}`;
-dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), envFile) });
 
 const _env = z.object({
     NODE_ENV: z.enum(["development", "staging", "production"]).default("development"),
