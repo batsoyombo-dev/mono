@@ -10,7 +10,9 @@
     },
     "dependencies": {
         "@mono/services": "*",
-        "@mono/global-config": "*"
+        "@mono/global-config": "*",
+        "@mono/cache": "*",
+        "@mono/utils": "*"
     },
     "devDependencies": {
         "@mono/eslint-config": "*",

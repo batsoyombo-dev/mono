@@ -12,6 +12,7 @@
     "dependencies": {
         "@aws-sdk/client-s3": "^3.1057.0",
         "@mono/database": "*",
+        "@mono/error-handling": "*",
         "@mono/global-config": "*",
         "@mono/logger": "*",
         "@mono/utils": "*",

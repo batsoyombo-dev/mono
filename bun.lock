@@ -15,8 +15,10 @@
       "name": "api",
       "version": "1.0.0",
       "dependencies": {
+        "@mono/cache": "*",
         "@mono/global-config": "*",
         "@mono/services": "*",
+        "@mono/utils": "*",
       },
       "devDependencies": {
         "@mono/eslint-config": "*",
@@ -26,6 +28,11 @@
     "apps/mq-worker": {
       "name": "mq-worker",
       "version": "1.0.0",
+      "dependencies": {
+        "@mono/global-config": "*",
+        "@mono/services": "*",
+        "@mono/utils": "*",
+      },
       "devDependencies": {
         "@mono/eslint-config": "*",
         "@mono/typescript-config": "*",
@@ -34,6 +41,11 @@
     "apps/scheduler": {
       "name": "scheduler",
       "version": "1.0.0",
+      "dependencies": {
+        "@mono/global-config": "*",
+        "@mono/services": "*",
+        "@mono/utils": "*",
+      },
       "devDependencies": {
         "@mono/eslint-config": "*",
         "@mono/typescript-config": "*",
@@ -73,6 +85,18 @@
         "@mono/typescript-config": "*",
         "@types/pg": "^8.20.0",
         "prisma": "^7.8.0",
+      },
+    },
+    "packages/error-handling": {
+      "name": "@mono/error-handling",
+      "version": "0.0.0",
+      "dependencies": {
+        "@mono/global-config": "*",
+        "@mono/logger": "*",
+      },
+      "devDependencies": {
+        "@mono/eslint-config": "*",
+        "@mono/typescript-config": "*",
       },
     },
     "packages/eslint-config": {
@@ -121,6 +145,7 @@
       "dependencies": {
         "@aws-sdk/client-s3": "^3.1057.0",
         "@mono/database": "*",
+        "@mono/error-handling": "*",
         "@mono/global-config": "*",
         "@mono/logger": "*",
         "@mono/utils": "*",
@@ -358,6 +383,8 @@
     "@mono/cache": ["@mono/cache@workspace:packages/cache"],
 
     "@mono/database": ["@mono/database@workspace:packages/database"],
+
+    "@mono/error-handling": ["@mono/error-handling@workspace:packages/error-handling"],
 
     "@mono/eslint-config": ["@mono/eslint-config@workspace:packages/eslint-config"],
 

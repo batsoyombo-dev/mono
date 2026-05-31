@@ -38,8 +38,8 @@ export type NotificationStatus =
 export type DeliveryMethodType = "email" | "sms" | "push" | "in_app" | "webhook";
 
 export interface CreateNotificationData {
+    template: string;
     actionEventId: number;
-    template?: string;
 
     payload?: Record<string, any>;
     deliveryMethods?: DeliveryMethodType[];

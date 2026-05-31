@@ -17,10 +17,9 @@ import { mailClient } from "../mail";
 import { notificationRecipientRepository } from "../../repositories";
 import type {
     ActionEventData,
+    CreateNotificationData,
     DeliveryMethodType,
     DeliveryResult,
-    NotificationPriority,
-    NotificationRecipientData,
     NotificationRecipientFilter,
     NotificationTemplate,
     TemplateRenderContext,
@@ -216,15 +215,7 @@ export class EventNotificationClient {
 
     async createActionEvent(
         eventData: ActionEventData,
-        notificationConfigs?: Array<{
-            template: string;
-            deliveryMethods?: DeliveryMethodType[];
-            priority?: NotificationPriority;
-
-            payload?: Record<string, any>;
-            scheduledFor?: Date;
-            expiresAt?: Date;
-        }>
+        notificationConfigs?: Array<CreateNotificationData>
     ): Promise<{
         actionEvent: ActionEvent;
         notifications: (Notification | null)[];
@@ -275,16 +266,7 @@ export class EventNotificationClient {
 
     private async createNotificationFromEvent(
         actionEvent: ActionEvent,
-        config: {
-            template: string;
-            deliveryMethods?: DeliveryMethodType[];
-            priority?: NotificationPriority;
-
-            payload?: Record<string, any>;
-            recipients?: NotificationRecipientData[];
-            scheduledFor?: Date;
-            expiresAt?: Date;
-        }
+        config: CreateNotificationData
     ): Promise<Notification | null> {
         if (!NotificationTemplateRegistry.hasTemplate(config.template)) {
             throw new Error(`Template '${config.template}' not found`);
