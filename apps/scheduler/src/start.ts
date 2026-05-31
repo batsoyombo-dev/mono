@@ -1,5 +1,5 @@
-import { errorHandler } from "@mk/error-handling";
-import { logger } from "@mk/logger";
+import { errorHandler } from "@mono/error-handling";
+import { logger } from "@mono/logger";
 
 import { jobs } from "./initialize";
 import { Scheduler } from "./Scheduler";

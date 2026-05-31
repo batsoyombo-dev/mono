@@ -1,7 +1,6 @@
 /* eslint-disable turbo/no-undeclared-env-vars */
 
 import { createLogger, format, transports } from "winston";
-import "winston-daily-rotate-file";
 
 const { combine, timestamp, printf, colorize } = format;
 
