@@ -8,6 +8,7 @@ import { logger } from "@mono/logger";
 import handlebars from "handlebars";
 import type { Transporter } from "nodemailer";
 
+import { emailConfig } from "../../utils";
 import type {
     BulkEmailItem,
     BulkEmailResult,
@@ -18,7 +19,6 @@ import type {
     PlainTextEmailOptions,
     TemplateEmailOptions,
 } from "./types";
-import { emailConfig } from "../../utils";
 
 const __filename__ = fileURLToPath(import.meta.url);
 const __dirname__ = dirname(__filename__);

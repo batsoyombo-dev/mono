@@ -13,5 +13,97 @@ datasource db {
 }
 
 model User {
-  id Int @id @default(autoincrement())
+  id                     Int                     @id @default(autoincrement())
+  email                  String                  @unique @db.VarChar(128)
+  actionEvents           ActionEvent[]
+  notificationRecipients NotificationRecipient[]
+}
+
+model ActionEvent {
+  id       Int @id @default(autoincrement()) @map("id")
+  actorId  Int @map("actor_id")
+  entityId Int @map("entity_id")
+
+  context        Json?   @map("context")
+  entitySnapshot Json?   @map("entity_snapshot")
+  externalKey    String? @unique @map("external_key")
+  verb           String  @map("verb") @db.VarChar(32)
+  entityType     String  @map("entity_type") @db.VarChar(32)
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  notifications Notification[]
+  actor         User           @relation(fields: [actorId], references: [id])
+
+  @@index([entityId, createdAt])
+  @@index([actorId, createdAt])
+  @@index([verb, createdAt])
+  @@map("action_events")
+}
+
+model Notification {
+  id            Int @id @default(autoincrement()) @map("id")
+  actionEventId Int @map("action_event_id")
+
+  dedupeKey String? @unique @map("dedupe_key")
+  template  String? @map("template")
+  payload   Json?   @map("payload")
+
+  deliveryMethods String[]  @default([]) @map("delivery_methods")
+  priority        String    @map("priority") @db.VarChar(32)
+  status          String    @map("status") @db.VarChar(32)
+  scheduledFor    DateTime? @map("scheduled_for")
+  expiresAt       DateTime? @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  actionEvent     ActionEvent             @relation(fields: [actionEventId], references: [id])
+  recipients      NotificationRecipient[]
+  deliveryResults DeliveryResult[]
+
+  @@index([actionEventId, createdAt])
+  @@index([status, scheduledFor])
+  @@map("notifications")
+}
+
+model NotificationRecipient {
+  id             Int @id @default(autoincrement()) @map("id")
+  notificationId Int @map("notification_id")
+  userId         Int @map("user_id")
+
+  readAt DateTime? @map("read_at")
+
+  recipientData Json? @map("recipient_data")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user            User             @relation(fields: [userId], references: [id])
+  notification    Notification     @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  deliveryResults DeliveryResult[]
+
+  @@unique([notificationId, userId])
+  @@index([notificationId, userId])
+  @@map("notification_recipients")
+}
+
+model DeliveryResult {
+  id             Int  @id @default(autoincrement()) @map("id")
+  notificationId Int  @map("notification_id")
+  recipientId    Int? @map("recipient_id")
+
+  deliveryMethod String   @map("delivery_method") @db.VarChar(32)
+  success        Boolean  @map("success")
+  deliveryId     String?  @map("delivery_id")
+  errorMessage   String?  @map("error_message")
+  retryCount     Int      @default(0) @map("retry_count")
+  deliveredAt    DateTime @default(now()) @map("delivered_at")
+
+  notification Notification           @relation(fields: [notificationId], references: [id], onDelete: Cascade)
+  recipient    NotificationRecipient? @relation(fields: [recipientId], references: [id])
+
+  @@index([notificationId, deliveryMethod])
+  @@index([success, deliveredAt])
+  @@map("delivery_results")
 }
