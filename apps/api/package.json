@@ -12,6 +12,8 @@
         "@mono/services": "*",
         "@mono/global-config": "*",
         "@mono/cache": "*",
+        "@mono/error-handling": "*",
+        "@mono/logger": "*",
         "@mono/utils": "*"
     },
     "devDependencies": {

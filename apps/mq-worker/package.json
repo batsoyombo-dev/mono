@@ -10,6 +10,8 @@
     "dependencies": {
         "@mono/services": "*",
         "@mono/global-config": "*",
+        "@mono/logger": "*",
+        "@mono/error-handling": "*",
         "@mono/utils": "*"
     },
     "devDependencies": {

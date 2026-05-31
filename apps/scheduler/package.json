@@ -8,9 +8,13 @@
         "pre-commit": "bunx lint-staged"
     },
     "dependencies": {
-        "@mono/services": "*",
+        "@mono/error-handling": "*",
         "@mono/global-config": "*",
-        "@mono/utils": "*"
+        "@mono/logger": "*",
+        "@mono/services": "*",
+        "@mono/utils": "*",
+        "eventemitter3": "^5.0.4",
+        "node-cron": "^4.2.1"
     },
     "devDependencies": {
         "@mono/eslint-config": "*",

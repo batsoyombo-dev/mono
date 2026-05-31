@@ -19,3 +19,7 @@ export function randomString(length: number): string {
         chars.charAt(Math.floor(Math.random() * chars.length))
     ).join("");
 }
+
+export function generateUuid() {
+    return crypto.randomUUID();
+}
