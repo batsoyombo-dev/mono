@@ -1,4 +1,5 @@
-import { Job, Worker, WorkerOptions } from "bullmq";
+import type { Job, WorkerOptions } from "bullmq";
+import { Worker } from "bullmq";
 
 import { logger } from "@mono/logger";
 import type { JobNames, Queues } from "@mono/services";
@@ -15,8 +16,7 @@ export class DefaultWorker<TQueue extends Queues> {
                 const name = job.name as JobNames;
 
                 if (!(name in jobMap)) {
-                    logger.error("Job does not exist!");
-                    return;
+                    throw new Error(`Unknown job: ${job.name}`);
                 }
 
                 const { job: execJob, schema } = jobMap[name];
@@ -24,8 +24,7 @@ export class DefaultWorker<TQueue extends Queues> {
                 const validation = await schema.safeParseAsync(job.data);
 
                 if (!validation.success) {
-                    logger.error("Validation failed!");
-                    return;
+                    throw new Error(`Invalid ${name} job payload: ${validation.error.message}`);
                 }
 
                 logger.info(`${queueName}: starting to execute ${name} job!`);
@@ -33,17 +32,16 @@ export class DefaultWorker<TQueue extends Queues> {
                     await execJob.handle(job);
                     logger.info(`${queueName}: completed executing ${name} job!`);
                 } catch (err) {
-                    if (err instanceof Error) {
-                        logger.error(`${queueName}: failed executing ${name} job! ${err.message}`);
-                    }
+                    const error = err instanceof Error ? err : new Error(String(err));
+                    logger.error(`${queueName}: failed executing ${name} job! ${error.message}`);
+                    throw error;
                 }
             },
             options
         );
     }
 
-    onClose() {
-        this.worker.disconnect();
-        this.worker.close();
+    onClose(): Promise<void> {
+        return this.worker.close();
     }
 }

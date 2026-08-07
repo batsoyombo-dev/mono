@@ -1,5 +1,5 @@
-import { DefaultQueueJobs } from "./default";
-import { Queues } from "./queue.def";
+import type { DefaultQueueJobs } from "./default";
+import type { Queues } from "./queue.def";
 
 export * from "./default";
 

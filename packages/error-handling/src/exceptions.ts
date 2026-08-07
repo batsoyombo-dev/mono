@@ -40,7 +40,7 @@ export class NotFoundError extends AppError {
 /** 500 Internal Server Error */
 export class InternalServerError extends AppError {
     constructor(message = "Internal server error") {
-        super(message, 500, true, "InternalServerError");
+        super(message, 500, false, "InternalServerError");
     }
 }
 

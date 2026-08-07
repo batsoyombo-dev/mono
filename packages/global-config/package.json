@@ -6,7 +6,8 @@
     "main": "./src/index.ts",
     "types": "./src/index.ts",
     "scripts": {
-        "lint": "eslint . --fix",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
         "check-types": "tsc --noEmit"
     },
     "devDependencies": {

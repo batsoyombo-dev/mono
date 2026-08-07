@@ -28,10 +28,13 @@ const _env = z.object({
     MAIL_PROVIDER: z.string(),
     MAIL_HOST: z.string(),
     MAIL_REGION: z.string(),
-    MAIL_PORT: z.string(),
+    MAIL_PORT: z.coerce.number().int().min(1).max(65535),
     MAIL_USERNAME: z.string(),
     MAIL_PASSWORD: z.string(),
-    MAIL_ENCRYPTION: z.string(),
+    MAIL_ENCRYPTION: z
+        .enum(["true", "false", "1", "0", "tls", "ssl", "starttls", "none"])
+        .default("true")
+        .transform((value) => ["true", "1", "tls", "ssl", "starttls"].includes(value)),
     MAIL_FROM_NAME: z.string(),
     MAIL_FROM_ADDRESS: z.string(),
     WEB_BASE_URL: z.string(),

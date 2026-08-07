@@ -1,64 +1,81 @@
-import * as http from "http";
+import type * as http from "http";
 import * as util from "util";
 
 import { logger } from "@mono/logger";
 
 import { AppError, InternalServerError } from "./exceptions";
 
-let httpServerRef: http.Server;
+type ShutdownHandler = () => void | Promise<void>;
+
+let httpServerRef: http.Server | undefined;
+let isListening = false;
+let isTerminating = false;
+const shutdownHandlers = new Set<ShutdownHandler>();
 
 const errorHandler = {
-    // Listen to the global process-level error events
     listenToErrorEvents: (httpServer?: http.Server) => {
         if (httpServer) httpServerRef = httpServer;
+        if (isListening) return;
+        isListening = true;
+
         process.on("uncaughtException", (error) => {
-            errorHandler.handleError(error);
+            void errorHandler.handleError(error);
         });
 
         process.on("unhandledRejection", (reason) => {
-            errorHandler.handleError(reason);
+            void errorHandler.handleError(reason);
         });
 
         process.on("SIGTERM", () => {
-            logger.error("App received SIGTERM event, try to gracefully close the server");
-            terminateHttpServerAndExit();
+            logger.info("App received SIGTERM event, shutting down");
+            void terminateAndExit(0);
         });
 
         process.on("SIGINT", () => {
-            logger.error("App received SIGINT event, try to gracefully close the server");
-            terminateHttpServerAndExit();
+            logger.info("App received SIGINT event, shutting down");
+            void terminateAndExit(0);
         });
     },
 
-    handleError: (errorToHandle: unknown) => {
+    registerShutdownHandler: (handler: ShutdownHandler) => {
+        shutdownHandlers.add(handler);
+        return () => shutdownHandlers.delete(handler);
+    },
+
+    handleError: async (errorToHandle: unknown) => {
         try {
             const appError: AppError = normalizeError(errorToHandle);
             logger.error(JSON.stringify(appError));
-            metricsExporter.fireMetric("error", { errorName: appError.name }); // fire any custom metric when handling error
-            // A common best practice is to crash when an unknown error (non-trusted) is being thrown
+            void metricsExporter.fireMetric("error", { errorName: appError.name });
             if (!appError.isTrusted) {
-                terminateHttpServerAndExit();
+                await terminateAndExit(1);
             }
         } catch (handlingError: unknown) {
             // Not using the logger here because it might have failed
-            process.stdout.write(
+            process.stderr.write(
                 "The error handler failed, here are the handler failure and then the origin error that it tried to handle"
             );
-            process.stdout.write(JSON.stringify(handlingError));
-            process.stdout.write(JSON.stringify(errorToHandle));
+            process.stderr.write(JSON.stringify(handlingError));
+            process.stderr.write(JSON.stringify(errorToHandle));
         }
     },
 };
 
-const terminateHttpServerAndExit = async () => {
-    // maybe implement more complex logic here (like using 'http-terminator' library)
+const terminateAndExit = async (exitCode: number) => {
+    if (isTerminating) return;
+    isTerminating = true;
+
+    await Promise.allSettled(Array.from(shutdownHandlers, (handler) => handler()));
+
     if (httpServerRef) {
-        httpServerRef.close();
+        await new Promise<void>((resolve) => {
+            httpServerRef?.close(() => resolve());
+        });
     }
-    process.exit();
+
+    process.exitCode = exitCode;
 };
 
-// The input might won't be 'AppError' or even 'Error' instance, the output of this function will be - AppError.
 const normalizeError = (errorToHandle: unknown): AppError => {
     if (errorToHandle instanceof AppError) {
         return errorToHandle;

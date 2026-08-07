@@ -1,8 +1,11 @@
+import type { ObjectCannedACL } from "@aws-sdk/client-s3";
 import {
     DeleteObjectCommand,
-    ObjectCannedACL,
+    GetObjectCommand,
+    HeadObjectCommand,
     PutObjectCommand,
     S3Client,
+    S3ServiceException,
 } from "@aws-sdk/client-s3";
 import { config } from "@mono/global-config";
 
@@ -11,7 +14,7 @@ export type S3StorageConfigProps = {
     accessKeyId: string;
     secretAccessKey: string;
     region: string;
-    visibility: ObjectCannedACL;
+    visibility?: ObjectCannedACL;
 };
 
 export class S3Storage {
@@ -32,14 +35,30 @@ export class S3Storage {
             new PutObjectCommand({
                 Bucket: this.config.bucketName,
                 Key: path,
-                ACL: this.config.visibility,
+                ...(this.config.visibility ? { ACL: this.config.visibility } : {}),
                 Body: file,
             })
         );
     }
 
-    public has(_path: string, _filename: string) {
-        return false;
+    public async has(path: string): Promise<boolean> {
+        try {
+            await this.client.send(
+                new HeadObjectCommand({
+                    Bucket: this.config.bucketName,
+                    Key: path,
+                })
+            );
+            return true;
+        } catch (error) {
+            if (
+                error instanceof S3ServiceException &&
+                ["NotFound", "NoSuchKey", "NoSuchBucket"].includes(error.name)
+            ) {
+                return false;
+            }
+            throw error;
+        }
     }
 
     public delete(path: string) {
@@ -51,8 +70,19 @@ export class S3Storage {
         );
     }
 
-    public get(_path: string, _filename: string) {
-        return Buffer.from("dwq");
+    public async get(path: string): Promise<Buffer> {
+        const response = await this.client.send(
+            new GetObjectCommand({
+                Bucket: this.config.bucketName,
+                Key: path,
+            })
+        );
+
+        if (!response.Body) {
+            throw new Error(`S3 object ${path} has no response body`);
+        }
+
+        return Buffer.from(await response.Body.transformToByteArray());
     }
 }
 
@@ -61,5 +91,4 @@ export const s3Storage = new S3Storage({
     bucketName: config.AWS_BUCKET_NAME,
     region: config.AWS_REGION,
     secretAccessKey: config.AWS_SECRET_KEY,
-    visibility: "public-read",
 });

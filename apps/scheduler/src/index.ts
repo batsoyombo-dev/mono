@@ -1,4 +1,4 @@
-import { AppError, errorHandler } from "@mono/error-handling";
+import { errorHandler } from "@mono/error-handling";
 import { logger } from "@mono/logger";
 import "dotenv/config";
 
@@ -13,5 +13,5 @@ start()
         logger.info(`Scheduler is running. UTC: ${new Date()}`);
     })
     .catch((error) => {
-        errorHandler.handleError(new AppError("startup-failure", error.message));
+        void errorHandler.handleError(error);
     });

@@ -1,7 +1,8 @@
 import { EventEmitter } from "eventemitter3";
 import cron from "node-cron";
 
-import { Logger, logger } from "@mono/logger";
+import type { Logger } from "@mono/logger";
+import { logger } from "@mono/logger";
 
 import { generateUuid } from "@mono/utils";
 import type {
@@ -73,7 +74,7 @@ export class Scheduler extends EventEmitter {
         };
 
         // Create cron task
-        job.cronTask = cron.schedule(
+        job.cronTask = cron.createTask(
             cronExpression,
             async () => {
                 await this.#executeJob(job);
@@ -89,9 +90,11 @@ export class Scheduler extends EventEmitter {
         this.#logger.info(`Job added: ${name} (${cronExpression})`, { jobId, name });
         this.emit("jobAdded", job);
 
-        // Run immediately if requested
-        if (job.runOnInit && this.#isRunning) {
-            setImmediate(() => this.#executeJob(job));
+        if (this.#isRunning && job.enabled) {
+            job.cronTask.start();
+            if (job.runOnInit) {
+                setImmediate(() => this.#executeJob(job));
+            }
         }
 
         return jobId;
@@ -115,12 +118,10 @@ export class Scheduler extends EventEmitter {
         // Cancel running instances
         const runningInstances = this.#runningJobs.get(jobId);
         if (runningInstances) {
-            for (const instance of runningInstances) {
-                if (instance.timeout) {
-                    clearTimeout(instance.timeout);
-                }
+            for (const instance of [...runningInstances]) {
+                instance.abortController.abort();
+                this.#handleJobCompletion(job, instance, new Error("Job removed"));
             }
-            this.#runningJobs.delete(jobId);
         }
 
         this.#jobs.delete(jobId);
@@ -138,6 +139,8 @@ export class Scheduler extends EventEmitter {
         if (!job) {
             throw new Error(`Job not found: ${jobId}`);
         }
+
+        job.enabled = enabled;
 
         if (enabled && this.#isRunning) {
             job.cronTask.start();
@@ -185,6 +188,9 @@ export class Scheduler extends EventEmitter {
         for (const job of this.#jobs.values()) {
             if (job.enabled) {
                 job.cronTask.start();
+                if (job.runOnInit) {
+                    setImmediate(() => this.#executeJob(job));
+                }
             }
         }
 
@@ -209,14 +215,15 @@ export class Scheduler extends EventEmitter {
         }
 
         // Cancel running jobs
-        for (const [_jobId, instances] of this.#runningJobs.entries()) {
-            for (const instance of instances) {
-                if (instance.timeout) {
-                    clearTimeout(instance.timeout);
+        for (const [jobId, instances] of this.#runningJobs.entries()) {
+            const job = this.#jobs.get(jobId);
+            for (const instance of [...instances]) {
+                instance.abortController.abort();
+                if (job) {
+                    this.#handleJobCompletion(job, instance, new Error("Scheduler stopped"));
                 }
             }
         }
-        this.#runningJobs.clear();
 
         this.#updateStats();
         this.#logger.info("Scheduler stopped");
@@ -354,6 +361,8 @@ export class Scheduler extends EventEmitter {
             startTime,
             manual,
             timeout: null,
+            abortController: new AbortController(),
+            completed: false,
         };
 
         // Add to running jobs
@@ -361,12 +370,6 @@ export class Scheduler extends EventEmitter {
             this.#runningJobs.set(job.id, []);
         }
         this.#runningJobs.get(job.id)!.push(execution);
-
-        // Set timeout
-        execution.timeout = setTimeout(() => {
-            this.#logger.error(`Job ${job.name} timed out`, { jobId: job.id, executionId });
-            this.#handleJobCompletion(job, execution, new Error("Job execution timed out"));
-        }, job.timeout);
 
         job.lastRun = new Date();
         job.runCount++;
@@ -380,24 +383,42 @@ export class Scheduler extends EventEmitter {
 
         this.emit("jobStarted", job, execution);
 
+        const timeout = new Promise<never>((_, reject) => {
+            execution.timeout = setTimeout(() => {
+                execution.abortController.abort();
+                reject(new Error("Job execution timed out"));
+            }, job.timeout);
+        });
+
+        try {
+            const result = await Promise.race([this.#runJobWithRetries(job, execution), timeout]);
+            this.#handleJobCompletion(job, execution, null, result);
+            return result;
+        } catch (error) {
+            const failure = error instanceof Error ? error : new Error(String(error));
+            this.#handleJobCompletion(job, execution, failure);
+            throw failure;
+        }
+    }
+
+    async #runJobWithRetries(job: Job, execution: JobExecution): Promise<unknown> {
         let attempt = 0;
         let lastError: Error | null = null;
 
         while (attempt <= job.retries) {
+            if (execution.abortController.signal.aborted) {
+                throw new Error("Job execution aborted");
+            }
+
             try {
-                const result = await job.task({
+                return await job.task({
                     jobId: job.id,
                     jobName: job.name,
-                    executionId,
+                    executionId: execution.id,
                     attempt,
                     metadata: job.metadata,
+                    abortSignal: execution.abortController.signal,
                 });
-
-                if (execution.timeout) {
-                    clearTimeout(execution.timeout);
-                }
-                this.#handleJobCompletion(job, execution, null, result);
-                return result;
             } catch (error) {
                 lastError = error instanceof Error ? error : new Error(String(error));
                 attempt++;
@@ -407,23 +428,16 @@ export class Scheduler extends EventEmitter {
                         `Job ${job.name} failed, retrying (${attempt}/${job.retries})`,
                         {
                             jobId: job.id,
-                            executionId,
+                            executionId: execution.id,
                             error: lastError.message,
                         }
                     );
-
-                    // Wait before retry (exponential backoff)
                     await new Promise((resolve) => setTimeout(resolve, 2 ** attempt * 1000));
                 }
             }
         }
 
-        // All retries failed
-        if (execution.timeout) {
-            clearTimeout(execution.timeout);
-        }
-        this.#handleJobCompletion(job, execution, lastError);
-        throw lastError;
+        throw lastError ?? new Error("Job execution failed");
     }
 
     /**
@@ -435,6 +449,16 @@ export class Scheduler extends EventEmitter {
         error: Error | null,
         result: unknown = null
     ): void {
+        if (execution.completed) {
+            return;
+        }
+        execution.completed = true;
+
+        if (execution.timeout) {
+            clearTimeout(execution.timeout);
+            execution.timeout = null;
+        }
+
         const endTime = Date.now();
         const duration = endTime - execution.startTime;
 

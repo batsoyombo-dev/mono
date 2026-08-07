@@ -22,21 +22,6 @@ export async function startSchedulerService() {
     scheduler.addJobs(jobs);
     scheduler.start();
 
-    process.on("uncaughtException", (error) => {
-        errorHandler.handleError(error);
-    });
-
-    process.on("unhandledRejection", (reason) => {
-        errorHandler.handleError(reason);
-    });
-
-    process.on("SIGTERM", () => {
-        logger.error("App received SIGTERM event, try to gracefully close the server");
-        scheduler.stop();
-    });
-
-    process.on("SIGINT", () => {
-        logger.error("App received SIGINT event, try to gracefully close the server");
-        scheduler.stop();
-    });
+    errorHandler.registerShutdownHandler(() => scheduler.stop());
+    errorHandler.listenToErrorEvents();
 }

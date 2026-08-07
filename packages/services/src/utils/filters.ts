@@ -105,14 +105,21 @@ const parseArrayValue = (
 function setNestedValue(obj: Record<string, any>, keys: string[], value: any) {
     const [firstKey, ...restKeys] = keys;
 
-    if (!firstKey) return;
+    if (!firstKey || keys.some((key) => ["__proto__", "constructor", "prototype"].includes(key))) {
+        return;
+    }
 
     if (!restKeys.length) {
         obj[firstKey] = value;
         return;
     }
 
-    if (!obj[firstKey]) {
+    if (
+        !Object.hasOwn(obj, firstKey) ||
+        typeof obj[firstKey] !== "object" ||
+        obj[firstKey] === null ||
+        Array.isArray(obj[firstKey])
+    ) {
         obj[firstKey] = {};
     }
 

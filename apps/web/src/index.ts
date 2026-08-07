@@ -1,1 +1,1 @@
-console.log("dqw");
+export const webAppName = "hippocards-global";

@@ -1,5 +1,5 @@
 import { DefaultQueue } from "../queue.def";
-import { HealthSchemaType, MailSchemaType } from "./types";
+import type { HealthSchemaType, MailSchemaType } from "./types";
 
 export type DefaultQueueJobs = {
     health: HealthSchemaType;

@@ -1,6 +1,7 @@
 import { config } from "@mono/global-config";
 import { logger } from "@mono/logger";
-import nodemailer, { Transporter } from "nodemailer";
+import type { Transporter } from "nodemailer";
+import nodemailer from "nodemailer";
 
 export interface EmailConfig {
     provider: "smtp";
@@ -8,6 +9,8 @@ export interface EmailConfig {
     fromName: string;
     smtp: {
         host: string;
+        port: number;
+        encryption: boolean;
         user: string;
         password: string;
     };
@@ -38,6 +41,8 @@ class EmailConfigManager {
             fromName: config.MAIL_FROM_NAME || "Email Service",
             smtp: {
                 host: config.MAIL_HOST,
+                port: config.MAIL_PORT,
+                encryption: config.MAIL_ENCRYPTION,
                 user: config.MAIL_USERNAME,
                 password: config.MAIL_PASSWORD,
             },
@@ -47,7 +52,7 @@ class EmailConfigManager {
                 region: config.MAIL_REGION,
             },
             server: {
-                port: config.SERVER_PORT || 3000,
+                port: config.SERVER_PORT,
                 baseUrl: config.BASE_URL,
             },
         };
@@ -66,12 +71,12 @@ class EmailConfigManager {
 
         this.transporter = nodemailer.createTransport({
             host: this.config.smtp.host,
+            port: this.config.smtp.port,
+            secure: this.config.smtp.encryption && this.config.smtp.port === 465,
+            requireTLS: this.config.smtp.encryption && this.config.smtp.port !== 465,
             auth: {
                 user: this.config.smtp.user,
                 pass: this.config.smtp.password,
-            },
-            tls: {
-                rejectUnauthorized: false,
             },
         });
     }

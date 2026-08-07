@@ -5,9 +5,9 @@
     "main": "./src/index.ts",
     "types": "./src/index.ts",
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1",
-        "lint": "eslint . --fix",
-        "pre-commit": "bunx lint-staged"
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "check-types": "tsc --noEmit"
     },
     "dependencies": {
         "date-fns": "^4.1.0",
@@ -18,8 +18,5 @@
         "@mono/eslint-config": "*",
         "@mono/typescript-config": "*",
         "@types/numeral": "^2.0.5"
-    },
-    "lint-staged": {
-        "*.{js,ts,tsx}": "bun run lint"
     }
 }

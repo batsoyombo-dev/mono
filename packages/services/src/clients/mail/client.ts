@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-/* eslint-disable @typescript-eslint/naming-convention */
+
 import { readFile } from "fs/promises";
-import { dirname, join } from "path";
+import { dirname, resolve } from "path";
 import { fileURLToPath } from "url";
 
 import { logger } from "@mono/logger";
@@ -57,10 +57,7 @@ class MailClient {
             };
         } catch (error) {
             logger.error("❌ Error sending plain text email:", error);
-            throw {
-                success: false,
-                error: (error as Error).message,
-            };
+            throw new Error((error as Error).message, { cause: error });
         }
     }
 
@@ -87,10 +84,7 @@ class MailClient {
             };
         } catch (error) {
             logger.error("❌ Error sending HTML email:", error);
-            throw {
-                success: false,
-                error: (error as Error).message,
-            };
+            throw new Error((error as Error).message, { cause: error });
         }
     }
 
@@ -120,10 +114,7 @@ class MailClient {
             };
         } catch (error) {
             logger.error("❌ Error sending templated email:", error);
-            throw {
-                success: false,
-                error: (error as Error).message,
-            };
+            throw new Error((error as Error).message, { cause: error });
         }
     }
 
@@ -205,10 +196,7 @@ class MailClient {
             };
         } catch (error) {
             logger.error("❌ Error sending email with attachments:", error);
-            throw {
-                success: false,
-                error: (error as Error).message,
-            };
+            throw new Error((error as Error).message, { cause: error });
         }
     }
 
@@ -217,7 +205,13 @@ class MailClient {
      */
     private async renderTemplate(templateName: string, data: Record<string, any>): Promise<string> {
         try {
-            const templatePath = join(__dirname__, "../templates", `${templateName}.hbs`);
+            if (!/^[a-zA-Z0-9_-]+$/.test(templateName)) {
+                throw new Error(
+                    "Template name must contain only letters, numbers, underscores, and hyphens"
+                );
+            }
+
+            const templatePath = resolve(__dirname__, "templates", `${templateName}.hbs`);
             const templateContent = await readFile(templatePath, "utf8");
             const template = handlebars.compile(templateContent);
 
@@ -231,7 +225,9 @@ class MailClient {
 
             return template(templateData);
         } catch (error) {
-            throw new Error(`Template rendering failed: ${(error as Error).message}`);
+            throw new Error(`Template rendering failed: ${(error as Error).message}`, {
+                cause: error,
+            });
         }
     }
 
@@ -265,12 +261,7 @@ class MailClient {
             };
         } catch (error) {
             logger.error("❌ Connection test failed:", error);
-            throw {
-                success: false,
-                message: "Connection test failed",
-                provider: emailConfig.getProvider(),
-                error: (error as Error).message,
-            };
+            throw new Error((error as Error).message, { cause: error });
         }
     }
 }

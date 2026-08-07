@@ -1,4 +1,4 @@
-import { PaginationRequest, PaginationResponse } from "@mk/types";
+import type { PaginationRequest, PaginationResponse } from "./types";
 
 export const parsePagination = (
     pagination: Omit<PaginationRequest, "skip">,

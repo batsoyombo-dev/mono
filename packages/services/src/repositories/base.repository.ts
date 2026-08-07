@@ -1,6 +1,8 @@
-import { prisma, Prisma } from "@mono/database";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { Prisma } from "@mono/database";
 
-import { PaginationRequest, PaginationResponse, serializePagination } from "@mono/utils";
+import type { PaginationRequest, PaginationResponse } from "@mono/utils";
+import { serializePagination } from "@mono/utils";
 
 type Tx = Prisma.TransactionClient;
 
@@ -35,8 +37,8 @@ export abstract class BaseRepository<T> {
         if (includeDeleted) return where ?? ({} as W);
 
         return {
-            ...(this.softDelete ? { deletedAt: null } : {}),
             ...(where ?? {}),
+            ...(this.softDelete ? { deletedAt: null } : {}),
         } as W;
     }
 
@@ -74,6 +76,10 @@ export abstract class BaseRepository<T> {
     }
 
     getDeletedMany<A extends Prisma.Args<T, "findMany">>(args?: A, transaction?: Tx) {
+        if (!this.softDelete) {
+            throw new Error("Deleted records are only available on soft-delete repositories");
+        }
+
         return this.getModel(transaction).findMany({
             ...(args ?? {}),
             where: {
@@ -287,6 +293,10 @@ export abstract class BaseRepository<T> {
         where: W,
         transaction?: Tx
     ): Promise<Prisma.Result<T, { where: W; data: { deletedAt: null } }, "updateMany">> {
+        if (!this.softDelete) {
+            throw new Error("Only soft-delete repositories can restore records");
+        }
+
         return this.getModel(transaction).updateMany({
             where,
             data: {

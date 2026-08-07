@@ -1,5 +1,5 @@
 {
-    "name": "procure",
+    "name": "hippocards-global",
     "devDependencies": {
         "@types/node": "^25.9.1",
         "prettier": "^3.7.4",
@@ -22,9 +22,13 @@
         "dev:mq-worker": "turbo run dev --filter='mq-worker'",
         "db:generate": "turbo run db:generate",
         "db:migrate": "turbo run db:migrate",
+        "db:deploy": "turbo run db:deploy",
         "lint": "turbo run lint",
-        "format": "prettier --write \"**/*.{ts,tsx,md}\"",
-        "check-types": "turbo run check-types"
+        "lint:fix": "turbo run lint:fix",
+        "format": "prettier --check \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
+        "format:fix": "prettier --write \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
+        "check-types": "bun run db:generate && turbo run check-types",
+        "test": "bun test"
     },
     "workspaces": [
         "apps/*",

@@ -1,7 +1,7 @@
 import "dotenv/config";
 import minimist from "minimist";
 
-import { AppError, errorHandler } from "@mono/error-handling";
+import { errorHandler } from "@mono/error-handling";
 import { logger } from "@mono/logger";
 
 import { startQueueService } from "./start";
@@ -19,5 +19,5 @@ start()
         logger.info(`${queueName} worker is running. UTC: ${new Date()}`);
     })
     .catch((error) => {
-        errorHandler.handleError(new AppError("startup-failure", error.message));
+        void errorHandler.handleError(error);
     });

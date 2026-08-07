@@ -5,6 +5,7 @@ export interface JobContext {
     readonly executionId: string;
     readonly attempt: number;
     readonly metadata: Record<string, unknown>;
+    readonly abortSignal: AbortSignal;
 }
 
 export type JobTask = (context: JobContext) => Promise<unknown> | unknown;
@@ -32,7 +33,7 @@ export interface Job {
     readonly name: string;
     readonly cronExpression: string;
     readonly task: JobTask;
-    readonly enabled: boolean;
+    enabled: boolean;
     readonly timezone: string;
     readonly retries: number;
     readonly timeout: number;
@@ -52,7 +53,9 @@ export interface JobExecution {
     readonly jobId: string;
     readonly startTime: number;
     readonly manual: boolean;
-    timeout: NodeJS.Timeout | null;
+    timeout: ReturnType<typeof setTimeout> | null;
+    abortController: AbortController;
+    completed: boolean;
 }
 
 export interface JobHistoryEntry {

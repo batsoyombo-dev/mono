@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Job } from "bullmq";
+import type { Job } from "bullmq";
 
 export interface JobDef<T> {
     handle: (job: Job<T>) => Promise<any>;

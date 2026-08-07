@@ -4,9 +4,11 @@
     "type": "module",
     "scripts": {
         "dev": "bun run src/index.ts",
-        "test": "echo \"Error: no test specified\" && exit 1",
-        "lint": "eslint . --fix",
-        "pre-commit": "bunx lint-staged"
+        "start": "bun dist/index.js",
+        "build": "bun build ./src/index.ts --outdir dist --target bun --sourcemap && mkdir -p dist/templates && cp -R ../../packages/services/src/clients/mail/templates/. dist/templates",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "check-types": "tsc --noEmit"
     },
     "dependencies": {
         "@mono/error-handling": "*",
@@ -22,8 +24,5 @@
         "@mono/eslint-config": "*",
         "@mono/typescript-config": "*",
         "@types/minimist": "^1.2.5"
-    },
-    "lint-staged": {
-        "*.{js,ts,tsx}": "bun run lint"
     }
 }

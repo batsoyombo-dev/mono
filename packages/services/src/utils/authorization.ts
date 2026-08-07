@@ -63,11 +63,12 @@ export class PolicyBasedAuthorization {
     private rolePermissions: PolicyMap = new Map();
     private matchers: Map<string, MatcherFunction> = new Map();
     private dbAdapter?: DatabaseAdapter;
+    private databaseLoad: Promise<void>;
 
     constructor(config: AuthorizationConfig, dbAdapter?: DatabaseAdapter) {
         this.dbAdapter = dbAdapter;
         this.importPolicies(config);
-        this.loadFromDatabase();
+        this.databaseLoad = this.loadFromDatabase();
     }
 
     async loadFromDatabase(): Promise<void> {
@@ -86,6 +87,7 @@ export class PolicyBasedAuthorization {
 
     setDatabaseAdapter(dbAdapter: DatabaseAdapter): void {
         this.dbAdapter = dbAdapter;
+        this.databaseLoad = this.loadFromDatabase();
     }
 
     addPolicy(
@@ -188,6 +190,8 @@ export class PolicyBasedAuthorization {
         action: string,
         context: Record<string, any> = {}
     ): Promise<boolean> {
+        await this.databaseLoad;
+
         if (this.policies.has(user)) {
             const userPolicies = this.policies.get(user)!;
             if (userPolicies.has(resource)) {
@@ -214,7 +218,7 @@ export class PolicyBasedAuthorization {
             }
         }
 
-        for (const [_name, matcher] of this.matchers) {
+        for (const matcher of this.matchers.values()) {
             const result = matcher(user, resource, action, context);
             if (result !== undefined) {
                 return result;
@@ -241,6 +245,8 @@ export class PolicyBasedAuthorization {
     }
 
     async getAllPermissions(user: string): Promise<Permission[]> {
+        await this.databaseLoad;
+
         const permissions: Permission[] = [];
 
         if (this.policies.has(user)) {
@@ -343,79 +349,4 @@ export class PolicyBasedAuthorization {
     }
 }
 
-class PrismaAdapter implements DatabaseAdapter {
-    constructor(private prisma: any) {}
-
-    async getUserRoles(userId: string): Promise<string[]> {
-        const userRole = await this.prisma.adminProfile.findUnique({
-            where: { userId: Number(userId) },
-            select: { roles: true },
-        });
-        return userRole.roles;
-    }
-
-    async getAllUserRoles(): Promise<UserRole[]> {
-        const userRoles = await this.prisma.adminProfile.findMany({
-            select: { userId: true, roles: true },
-        });
-        return userRoles
-            .map((userRole: any) =>
-                userRole.roles.map((role: any) => ({ userId: userRole.id, role }))
-            )
-            .flat();
-    }
-
-    async addUserRole(userId: string, role: string): Promise<void> {
-        await this.prisma.adminProfile.update({
-            where: {
-                userId,
-            },
-            data: { userId, roles: { push: role } },
-        });
-    }
-
-    async removeUserRole(userId: string, role: string): Promise<void> {
-        const userRoles = await this.getUserRoles(userId);
-        await this.prisma.userRole.deleteMany({
-            where: { userId, roles: userRoles.filter((userRole) => userRole !== role) },
-        });
-    }
-
-    async getAllPolicies(): Promise<PolicyRule[]> {
-        const profiles = await this.prisma.adminProfile.findMany({
-            select: { userId: true, policies: true },
-        });
-        const rules: PolicyRule[] = [];
-        for (const p of profiles) {
-            for (const entry of p.policies) {
-                const [resource, action, effect] = entry.split(":");
-                rules.push({
-                    subject: String(p.userId),
-                    resource,
-                    action,
-                    effect: effect as "allow" | "deny",
-                });
-            }
-        }
-        return rules;
-    }
-
-    async getAllRolePermissions(): Promise<{ role: string; resource: string; action: string }[]> {
-        const profiles = await this.prisma.adminProfile.findMany({
-            select: { roles: true, permissions: true },
-        });
-        const perms: { role: string; resource: string; action: string }[] = [];
-        for (const p of profiles) {
-            for (const r of p.roles) {
-                for (const entry of p.permissions) {
-                    const [resource, action] = entry.split(":");
-                    perms.push({ role: r, resource, action });
-                }
-            }
-        }
-        return perms;
-    }
-}
-
-export { PrismaAdapter };
 export type { AuthorizationConfig, DatabaseAdapter, UserRole };

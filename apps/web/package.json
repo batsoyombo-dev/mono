@@ -3,16 +3,16 @@
     "version": "1.0.0",
     "type": "module",
     "scripts": {
-        "test": "echo \"Error: no test specified\" && exit 1",
-        "lint": "eslint . --fix",
-        "pre-commit": "bunx lint-staged"
+        "dev": "bun --watch src/index.ts",
+        "start": "bun dist/index.js",
+        "build": "bun build ./src/index.ts --outdir dist --target bun --sourcemap",
+        "lint": "eslint .",
+        "lint:fix": "eslint . --fix",
+        "check-types": "tsc --noEmit"
     },
     "dependencies": {},
     "devDependencies": {
         "@mono/eslint-config": "*",
         "@mono/typescript-config": "*"
-    },
-    "lint-staged": {
-        "*.{js,ts,tsx}": "bun run lint"
     }
 }

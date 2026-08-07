@@ -1,7 +1,7 @@
-import { HealthSchemaType } from "@mono/services";
+import type { HealthSchemaType } from "@mono/services";
 
 import { logger } from "@mono/logger";
-import { JobDef } from "./job.def";
+import type { JobDef } from "./job.def";
 
 export const HealthJob: JobDef<HealthSchemaType> = {
     async handle(job) {

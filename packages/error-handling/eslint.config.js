@@ -1,4 +1,4 @@
-import { config } from "@mono/eslint-config/node";
+import { elysiaConfig } from "@mono/eslint-config/node";
 
 /** @type {import("eslint").Linter.Config} */
-export default config;
+export default elysiaConfig;

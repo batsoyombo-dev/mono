@@ -1,7 +1,8 @@
-import { healthSchema, JobNames, mailSchema } from "@mono/services";
+import type { JobNames } from "@mono/services";
+import { healthSchema, mailSchema } from "@mono/services";
 
 import { HealthJob, MailJob } from "./jobs";
-import { JobDef } from "./jobs/job.def";
+import type { JobDef } from "./jobs/job.def";
 
 export const jobMap = {
     health: {

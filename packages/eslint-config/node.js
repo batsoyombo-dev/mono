@@ -35,6 +35,8 @@ export const elysiaConfig = [
         files: ["**/*.ts", "**/*.tsx"],
         rules: {
             "import/extensions": "off",
+            "no-unused-vars": "off",
+            "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
         },
     },
     {

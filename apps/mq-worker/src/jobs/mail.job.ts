@@ -1,6 +1,7 @@
-import { mailClient, MailSchemaType } from "@mono/services";
+import type { MailSchemaType } from "@mono/services";
+import { mailClient } from "@mono/services";
 
-import { JobDef } from "./job.def";
+import type { JobDef } from "./job.def";
 
 export const MailJob: JobDef<MailSchemaType> = {
     async handle(job) {

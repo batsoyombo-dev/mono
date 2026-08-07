@@ -1,4 +1,3 @@
-/* eslint-disable no-console */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Prisma } from "@mono/database";
 import {
@@ -8,9 +7,9 @@ import {
     type NotificationRecipient,
     type User,
 } from "@mono/database";
-import { PaginationRequest } from "@mono/utils";
+import type { PaginationRequest } from "@mono/utils";
 
-import { PlainTextEmailOptions, TemplateEmailOptions } from "../mail/types";
+import type { PlainTextEmailOptions, TemplateEmailOptions } from "../mail/types";
 
 import { mailClient } from "../mail";
 
@@ -336,38 +335,51 @@ export class EventNotificationClient {
             return existing as Notification;
         }
 
-        const notification = (await prisma.notification.create({
-            data: {
-                actionEventId: actionEvent.id,
-                template: config.template,
-                payload: config.payload || {},
-                deliveryMethods: validDeliveryMethods,
-                priority: config.priority || "MEDIUM",
-                status: config.scheduledFor ? "SCHEDULED" : "PENDING",
-                scheduledFor: config.scheduledFor || null,
-                expiresAt: config.expiresAt || null,
-                dedupeKey,
-                recipients: {
-                    create: recipients.map((recipient) => ({
-                        user: {
-                            connect: {
-                                id: recipient.userId,
+        let notification: Notification;
+        try {
+            notification = (await prisma.notification.create({
+                data: {
+                    actionEventId: actionEvent.id,
+                    template: config.template,
+                    payload: config.payload || {},
+                    deliveryMethods: validDeliveryMethods,
+                    priority: config.priority || "MEDIUM",
+                    status: config.scheduledFor ? "SCHEDULED" : "PENDING",
+                    scheduledFor: config.scheduledFor || null,
+                    expiresAt: config.expiresAt || null,
+                    dedupeKey,
+                    recipients: {
+                        create: recipients.map((recipient) => ({
+                            user: {
+                                connect: {
+                                    id: recipient.userId,
+                                },
                             },
-                        },
-                        recipientData: (recipient.recipientData ||
-                            null) as Prisma.NullableJsonNullValueInput,
-                    })),
+                            recipientData: (recipient.recipientData ||
+                                null) as Prisma.NullableJsonNullValueInput,
+                        })),
+                    },
                 },
-            },
-            include: {
-                recipients: {
-                    include: { user: true },
+                include: {
+                    recipients: {
+                        include: { user: true },
+                    },
+                    actionEvent: {
+                        include: { actor: true },
+                    },
                 },
-                actionEvent: {
-                    include: { actor: true },
-                },
-            },
-        })) as Notification;
+            })) as Notification;
+        } catch (error) {
+            if ((error as { code?: unknown }).code !== "P2002") {
+                throw error;
+            }
+
+            const duplicate = await prisma.notification.findUnique({
+                where: { dedupeKey },
+            });
+            if (!duplicate) throw error;
+            return duplicate;
+        }
 
         if (!config.scheduledFor) {
             this.processNotificationDelivery(notification.id).catch((error) => {
@@ -378,7 +390,23 @@ export class EventNotificationClient {
         return notification;
     }
 
-    async processNotificationDelivery(notificationId: number): Promise<void> {
+    async processNotificationDelivery(
+        notificationId: number,
+        expectedStatus: "PENDING" | "SCHEDULED" = "PENDING"
+    ): Promise<void> {
+        const claimed = await prisma.notification.updateMany({
+            where: {
+                id: notificationId,
+                status: expectedStatus,
+                ...(expectedStatus === "SCHEDULED" ? { scheduledFor: { lte: new Date() } } : {}),
+            },
+            data: { status: "PROCESSING" },
+        });
+
+        if (claimed.count === 0) {
+            return;
+        }
+
         const notification = await prisma.notification.findUnique({
             where: { id: notificationId },
             include: {
@@ -391,42 +419,46 @@ export class EventNotificationClient {
             },
         });
 
-        if (!notification || notification.status !== "PENDING") {
+        if (!notification) {
             return;
         }
 
-        await prisma.notification.update({
-            where: { id: notificationId },
-            data: { status: "PROCESSING" },
-        });
+        try {
+            const deliveryPromises = [];
 
-        const deliveryPromises = [];
-
-        for (const recipient of notification.recipients) {
-            for (const methodName of notification.deliveryMethods) {
-                const delivery = this.deliveryMethods.get(methodName as DeliveryMethodType);
-                if (delivery) {
-                    deliveryPromises.push(
-                        this.deliverToRecipient(notification, recipient, delivery)
-                    );
+            for (const recipient of notification.recipients) {
+                for (const methodName of notification.deliveryMethods) {
+                    const delivery = this.deliveryMethods.get(methodName as DeliveryMethodType);
+                    if (delivery) {
+                        deliveryPromises.push(
+                            this.deliverToRecipient(notification, recipient, delivery)
+                        );
+                    }
                 }
             }
+
+            await Promise.all(deliveryPromises);
+
+            const deliveryResults = await prisma.deliveryResult.findMany({
+                where: { notificationId: notification.id },
+            });
+
+            const allFailed =
+                deliveryResults.length === 0 || deliveryResults.every((r) => !r.success);
+            const anySuccess = deliveryResults.some((r) => r.success);
+            const finalStatus = allFailed ? "FAILED" : anySuccess ? "DELIVERED" : "SENT";
+
+            await prisma.notification.update({
+                where: { id: notificationId },
+                data: { status: finalStatus },
+            });
+        } catch (error) {
+            await prisma.notification.update({
+                where: { id: notificationId },
+                data: { status: "FAILED" },
+            });
+            throw error;
         }
-
-        await Promise.all(deliveryPromises);
-
-        const deliveryResults = await prisma.deliveryResult.findMany({
-            where: { notificationId: notification.id },
-        });
-
-        const allFailed = deliveryResults.every((r) => !r.success);
-        const anySuccess = deliveryResults.some((r) => r.success);
-        const finalStatus = allFailed ? "FAILED" : anySuccess ? "DELIVERED" : "SENT";
-
-        await prisma.notification.update({
-            where: { id: notificationId },
-            data: { status: finalStatus },
-        });
     }
 
     private async deliverToRecipient(
@@ -578,7 +610,7 @@ export class EventNotificationClient {
         });
 
         for (const notification of scheduledNotifications) {
-            await this.processNotificationDelivery(notification.id);
+            await this.processNotificationDelivery(notification.id, "SCHEDULED");
         }
     }
 
@@ -594,3 +626,5 @@ export class EventNotificationClient {
         return result.count;
     }
 }
+
+export const eventNotificationClient = new EventNotificationClient();

@@ -1,5 +1,6 @@
 import { config } from "@mono/global-config";
-import { JobsOptions, Queue, QueueOptions } from "bullmq";
+import type { JobsOptions, QueueOptions } from "bullmq";
+import { Queue } from "bullmq";
 import z from "zod";
 
 export const QueueNameSchema = z.enum(["default"]);

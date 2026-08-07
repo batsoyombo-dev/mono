@@ -1,3 +1,4 @@
+import type { Duration, StartOfWeekOptions } from "date-fns";
 import {
     add,
     addDays,
@@ -5,7 +6,6 @@ import {
     addYears,
     differenceInDays,
     differenceInHours,
-    Duration,
     endOfDay,
     endOfMonth,
     endOfWeek,
@@ -17,7 +17,6 @@ import {
     startOfDay,
     startOfMonth,
     startOfWeek,
-    StartOfWeekOptions,
     startOfYear,
     sub,
     subDays,

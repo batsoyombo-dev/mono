@@ -1,8 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 import { AppError, errorHandler } from "@mono/error-handling";
 import { config } from "@mono/global-config";
-import { logger } from "@mono/logger";
 
 import { QueueNameSchema } from "@mono/services";
 import { DefaultWorker } from "./worker";
@@ -15,11 +12,6 @@ const parseQueueName = (queueName: string) => {
     return result.data;
 };
 
-const stopWorker = (worker: DefaultWorker<any>) => {
-    worker.onClose();
-    process.exit();
-};
-
 export async function startQueueService(queueName: string) {
     const parsedQueueName = parseQueueName(queueName);
 
@@ -29,21 +21,6 @@ export async function startQueueService(queueName: string) {
         },
     });
 
-    process.on("uncaughtException", (error) => {
-        errorHandler.handleError(error);
-    });
-
-    process.on("unhandledRejection", (reason) => {
-        errorHandler.handleError(reason);
-    });
-
-    process.on("SIGTERM", () => {
-        logger.error("App received SIGTERM event, try to gracefully close the server");
-        stopWorker(worker);
-    });
-
-    process.on("SIGINT", () => {
-        logger.error("App received SIGINT event, try to gracefully close the server");
-        stopWorker(worker);
-    });
+    errorHandler.registerShutdownHandler(() => worker.onClose());
+    errorHandler.listenToErrorEvents();
 }

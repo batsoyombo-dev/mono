@@ -17,7 +17,6 @@ function getRedisClient(options: CacheOptions): RedisClientType {
             url: options.url || "redis://localhost:6379",
             password: options.password ?? undefined,
         });
-        // eslint-disable-next-line no-console
         redisClient.connect().catch(console.error);
     }
     return redisClient;
@@ -66,7 +65,7 @@ export class RedisCache {
         if (cached !== null) return cached;
 
         const value = await fetcher();
-        await this.set(key, value, ttlMs * 1000);
+        await this.set(key, value, ttlMs);
         return value;
     }
 
@@ -75,9 +74,10 @@ export class RedisCache {
     }
 
     async flush(): Promise<void> {
-        const keys = await this.client.keys(this.key("*"));
-        if (keys.length > 0) {
-            await this.client.del(keys);
+        for await (const keys of this.client.scanIterator({ MATCH: this.key("*"), COUNT: 100 })) {
+            if (keys.length > 0) {
+                await this.client.del(keys);
+            }
         }
     }
 
@@ -175,7 +175,7 @@ export class RedisCache {
     }
 }
 
-export const cache = new RedisCache({ url: config.REDIS_URL });
+export const cache = new RedisCache({ url: config.REDIS_URL, password: config.REDIS_PASSWORD });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type CacheKeyParams = Record<string, any>;
