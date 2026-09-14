@@ -1,4 +1,4 @@
-# Hippocards Global
+# Mono
 
 Bun and Turborepo monorepo for an HTTP API, queue worker, scheduler, and shared services.
 
