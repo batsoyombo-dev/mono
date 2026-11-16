@@ -54,15 +54,20 @@ afterAll(async () => {
     await queue.close();
 });
 
-/** Polls until the job reaches the failed state, i.e. BullMQ gave up on it. */
-// Below TEST_TIMEOUT_MS, so a slow run fails with this helper's message, not bun's timeout.
 const TEST_TIMEOUT_MS = 20_000;
 
+/**
+ * Polls until the job reaches the failed state, i.e. BullMQ gave up on it, then loads it. The
+ * state is checked first: a job read before it moved would carry stale fields (attemptsMade 0).
+ * The timeout stays below TEST_TIMEOUT_MS, so a slow run fails with this helper's message.
+ */
 async function waitForFailed(jobId: string, timeoutMs = 10_000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
-        const job = await queue.getJob(jobId);
-        if (job && (await job.getState()) === "failed") return job;
+        if ((await queue.getJobState(jobId)) === "failed") {
+            const job = await queue.getJob(jobId);
+            if (job) return job;
+        }
         await Bun.sleep(25);
     }
     throw new Error(`Job ${jobId} did not fail within ${timeoutMs}ms`);
