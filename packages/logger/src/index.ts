@@ -1,4 +1,4 @@
-import { runtimeConfig } from "@mono/global-config/runtime";
+import { runtimeConfig } from "@mono/env/runtime";
 import { createLogger, format, transports } from "winston";
 
 const { combine, timestamp, printf, colorize, errors, json } = format;

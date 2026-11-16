@@ -11,7 +11,7 @@ Reference implementations to copy: `packages/services/src/modules/user`, `packag
 3. Services validate their own input with the module's zod schema (`schema.parse(payload)`), even when the controller already validated it. Workers and seeds call services too.
 4. Throw `AppError` subclasses from `@mono/error-handling` (`BadRequestError`, `UnauthorizedError`, `ForbiddenError`, `NotFoundError`, `ConflictError`, `ValidationError`, `InternalServerError`). Never build error responses by hand. Ownership checks (`ForbiddenError`) belong in the service handler.
 5. Log with `logger` from `@mono/logger` and a metadata object: `logger.error("Payment failed", { error, orderId })`. Never use `console`.
-6. Read environment only through `@mono/global-config`: packages use `env.<group>.<VAR>`, apps use their own `src/config.ts`. See "Configuration" below. Never read `process.env` anywhere else.
+6. Read environment only through `@mono/env`: packages use `env.<group>.<VAR>`, apps use their own `src/config.ts`. See "Configuration" below. Never read `process.env` anywhere else.
 7. Respect the dependency rules below. They are enforced by ESLint. To allow a new edge, change `packages/eslint-config/boundaries.js` deliberately; never add `eslint-disable` for `no-restricted-imports`.
 8. Never edit generated or vendored output: `packages/database/generated/`, `dist/`, `bun.lock` (let `bun install` write it).
 9. Every schema change ships with a migration (`bun run db:migrate -- --name <name>`). Never edit an applied migration.
@@ -51,21 +51,21 @@ Source of truth: `packages/eslint-config/boundaries.js`. Arrows point to what a 
 
 | Workspace              | May import (`@mono/...`)                                                                   |
 | ---------------------- | ------------------------------------------------------------------------------------------ |
-| `global-config`        | nothing                                                                                    |
+| `env`                  | nothing                                                                                    |
 | `utils`                | nothing (framework-free helpers)                                                           |
-| `logger`               | `global-config/runtime` only                                                               |
+| `logger`               | `env/runtime` only                                                                         |
 | `error-handling`       | `logger`                                                                                   |
-| `database`             | `global-config`                                                                            |
-| `cache`                | `global-config`, `logger`                                                                  |
-| `services`             | `cache`, `database`, `error-handling`, `global-config`, `logger`, `utils`                  |
+| `database`             | `env`                                                                                      |
+| `cache`                | `env`, `logger`                                                                            |
+| `services`             | `cache`, `database`, `env`, `error-handling`, `logger`, `utils`                            |
 | `services/src/modules` | same, minus `database` (use repositories; `auth/better-auth.ts` is the exception)          |
-| `mq-worker`            | `cache`, `error-handling`, `global-config`, `logger`, `services`, `utils`                  |
+| `mq-worker`            | `cache`, `env`, `error-handling`, `logger`, `services`, `utils`                            |
 | `api` entry and seeds  | everything above                                                                           |
 | `api` request layer    | `error-handling`, `logger`, `utils`, `services/<module>/schema`, `services/<module>/types` |
 
 The API request layer is `src/app.ts`, `src/controllers`, `src/plugins`, `src/utils` and `tests`. Code that needs real infrastructure inside the API, such as the queue dashboard in `src/admin`, lives outside it and is passed to `createApp({ plugins })`. It receives real services and config through `createApp(...)` in `apps/api/src/index.ts`, which is why API tests run without a database or `.env`.
 
-Importing `@mono/global-config` never throws: each `env.<group>` is validated on first read. `@mono/global-config/runtime` (`NODE_ENV`, `LOG_LEVEL`, lenient, never throws) exists only for the logger.
+Importing `@mono/env` never throws: each `env.<group>` is validated on first read. `@mono/env/runtime` (`NODE_ENV`, `LOG_LEVEL`, lenient, never throws) exists only for the logger.
 
 ## Recipes
 
@@ -121,7 +121,7 @@ The API and dashboard need a Better Auth session cookie for a verified user whos
 
 ### Configuration
 
-Every shared variable is declared once, in a named group in `packages/global-config/src/groups.ts` (`runtime`, `app`, `database`, `redis`, `auth`, `mail`, `storage`). Packages read it typed; apps validate it at startup.
+Every shared variable is declared once, in a named group in `packages/env/src/groups.ts` (`runtime`, `app`, `database`, `redis`, `auth`, `mail`, `storage`). Packages read it typed; apps validate it at startup.
 
 ```ts
 // Package: a factory that takes options, plus the instance apps import, built from env.

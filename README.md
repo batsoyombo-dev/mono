@@ -30,7 +30,7 @@ apps/
 packages/
   services/           business logic: modules, repositories, queues, clients
   database/           Prisma schema, migrations, client
-  global-config/      typed env: shared variable groups (env.<group>) + defineEnv for apps
+  env/                typed env: shared variable groups (env.<group>) + defineEnv for apps
   error-handling/     AppError hierarchy + process/shutdown handling
   logger/             winston (pretty in dev, JSON in production)
   cache/              Redis cache and distributed locks

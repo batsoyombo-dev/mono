@@ -1,4 +1,4 @@
-import { env } from "@mono/global-config";
+import { env } from "@mono/env";
 
 import { createDefaultQueue } from "./default/queue";
 import type { JobSchemas } from "./job-schemas";

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import handlebars from "handlebars";
 import nodemailer, { type SendMailOptions, type Transporter } from "nodemailer";
 
-import { env } from "@mono/global-config";
+import { env } from "@mono/env";
 
 import type {
     EmailResult,

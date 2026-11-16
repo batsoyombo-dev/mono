@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { env } from "@mono/global-config";
+import { env } from "@mono/env";
 import { logger } from "@mono/logger";
 import { Redis } from "ioredis";
 

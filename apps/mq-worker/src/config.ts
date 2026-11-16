@@ -1,4 +1,4 @@
-import { defineEnv } from "@mono/global-config";
+import { defineEnv } from "@mono/env";
 
 /**
  * The worker's environment: every shared group, validated together. Entry points import this

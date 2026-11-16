@@ -21,8 +21,8 @@
         "@bull-board/ui": "^9.13.1",
         "@elysia/cors": "^1.4.3",
         "@mono/database": "*",
+        "@mono/env": "*",
         "@mono/error-handling": "*",
-        "@mono/global-config": "*",
         "@mono/logger": "*",
         "@mono/services": "*",
         "@sinclair/typebox": "^0.34.52",
@@ -39,8 +39,8 @@
       "name": "mq-worker",
       "version": "0.0.0",
       "dependencies": {
+        "@mono/env": "*",
         "@mono/error-handling": "*",
-        "@mono/global-config": "*",
         "@mono/logger": "*",
         "@mono/services": "*",
         "bullmq": "catalog:",
@@ -56,7 +56,7 @@
       "name": "@mono/cache",
       "version": "0.0.0",
       "dependencies": {
-        "@mono/global-config": "*",
+        "@mono/env": "*",
         "@mono/logger": "*",
         "ioredis": "catalog:",
       },
@@ -69,7 +69,7 @@
       "name": "@mono/database",
       "version": "0.0.0",
       "dependencies": {
-        "@mono/global-config": "*",
+        "@mono/env": "*",
         "@prisma/adapter-pg": "^7.10.1",
         "@prisma/client": "^7.10.1",
         "pg": "^8.23.1",
@@ -79,6 +79,17 @@
         "@mono/typescript-config": "*",
         "@types/pg": "^8.23.1",
         "prisma": "^7.10.1",
+      },
+    },
+    "packages/env": {
+      "name": "@mono/env",
+      "version": "0.0.0",
+      "dependencies": {
+        "zod": "catalog:",
+      },
+      "devDependencies": {
+        "@mono/eslint-config": "*",
+        "@mono/typescript-config": "*",
       },
     },
     "packages/error-handling": {
@@ -104,22 +115,11 @@
         "typescript-eslint": "^8.72.2",
       },
     },
-    "packages/global-config": {
-      "name": "@mono/global-config",
-      "version": "0.0.0",
-      "dependencies": {
-        "zod": "catalog:",
-      },
-      "devDependencies": {
-        "@mono/eslint-config": "*",
-        "@mono/typescript-config": "*",
-      },
-    },
     "packages/logger": {
       "name": "@mono/logger",
       "version": "0.0.0",
       "dependencies": {
-        "@mono/global-config": "*",
+        "@mono/env": "*",
         "winston": "^3.19.0",
       },
       "devDependencies": {
@@ -134,8 +134,8 @@
         "@aws-sdk/client-s3": "^3.1169.0",
         "@better-auth/prisma-adapter": "^1.7.25",
         "@mono/database": "*",
+        "@mono/env": "*",
         "@mono/error-handling": "*",
-        "@mono/global-config": "*",
         "@mono/logger": "*",
         "@mono/utils": "*",
         "better-auth": "^1.7.25",
@@ -290,11 +290,11 @@
 
     "@mono/database": ["@mono/database@workspace:packages/database"],
 
+    "@mono/env": ["@mono/env@workspace:packages/env"],
+
     "@mono/error-handling": ["@mono/error-handling@workspace:packages/error-handling"],
 
     "@mono/eslint-config": ["@mono/eslint-config@workspace:packages/eslint-config"],
-
-    "@mono/global-config": ["@mono/global-config@workspace:packages/global-config"],
 
     "@mono/logger": ["@mono/logger@workspace:packages/logger"],
 

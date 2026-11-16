@@ -13,8 +13,8 @@
         "check-types": "tsc --noEmit"
     },
     "dependencies": {
+        "@mono/env": "*",
         "@mono/error-handling": "*",
-        "@mono/global-config": "*",
         "@mono/logger": "*",
         "@mono/services": "*",
         "bullmq": "catalog:",

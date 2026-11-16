@@ -1,6 +1,6 @@
 import { PrismaPg } from "@prisma/adapter-pg";
 
-import { env } from "@mono/global-config";
+import { env } from "@mono/env";
 
 import { PrismaClient } from "../generated/prisma/client";
 

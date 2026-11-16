@@ -11,7 +11,7 @@
         "check-types": "tsc --noEmit"
     },
     "dependencies": {
-        "@mono/global-config": "*",
+        "@mono/env": "*",
         "@mono/logger": "*",
         "ioredis": "catalog:"
     },

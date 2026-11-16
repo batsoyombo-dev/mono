@@ -8,7 +8,7 @@ import {
     S3ServiceException,
 } from "@aws-sdk/client-s3";
 
-import { env } from "@mono/global-config";
+import { env } from "@mono/env";
 
 export type S3StorageConfigProps = {
     bucketName: string;

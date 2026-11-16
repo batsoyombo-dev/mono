@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { commaSeparated, defineEnv, port } from "@mono/global-config";
+import { commaSeparated, defineEnv, port } from "@mono/env";
 
 /**
  * The API's environment: every shared group plus API-only variables, validated together.

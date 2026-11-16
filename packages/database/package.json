@@ -15,7 +15,7 @@
         "db:studio": "bun --env-file=../../.env prisma studio"
     },
     "dependencies": {
-        "@mono/global-config": "*",
+        "@mono/env": "*",
         "@prisma/adapter-pg": "^7.10.1",
         "@prisma/client": "^7.10.1",
         "pg": "^8.23.1"

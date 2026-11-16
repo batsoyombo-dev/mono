@@ -7,21 +7,21 @@
  * `"services"` allows the package root but not its subpaths.
  */
 const ALLOWED = {
-    "global-config": [],
+    env: [],
     utils: [],
     // The logger is imported everywhere, including tests that run without a .env,
     // so it reads the non-throwing runtime subpath instead of the full `config`.
-    logger: ["global-config/runtime"],
+    logger: ["env/runtime"],
     "error-handling": ["logger"],
-    database: ["global-config"],
-    cache: ["global-config", "logger"],
-    services: ["cache", "database", "error-handling", "global-config", "logger", "utils"],
-    "mq-worker": ["cache", "error-handling", "global-config", "logger", "services", "utils"],
+    database: ["env"],
+    cache: ["env", "logger"],
+    services: ["cache", "database", "env", "error-handling", "logger", "utils"],
+    "mq-worker": ["cache", "env", "error-handling", "logger", "services", "utils"],
     api: [
         "cache",
         "database",
+        "env",
         "error-handling",
-        "global-config",
         "logger",
         "services",
         "services/[^/]+/(schema|types)",
@@ -36,7 +36,7 @@ const SCOPED = {
             files: ["src/modules/**/*.ts"],
             // Better Auth's Prisma adapter needs the client itself.
             ignores: ["src/modules/auth/better-auth.ts"],
-            allowed: ["cache", "error-handling", "global-config", "logger", "utils"],
+            allowed: ["cache", "env", "error-handling", "logger", "utils"],
             reason: "Service modules reach the database through repositories (src/repositories).",
         },
     ],

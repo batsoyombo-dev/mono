@@ -1,4 +1,4 @@
-import { env } from "@mono/global-config";
+import { env } from "@mono/env";
 
 import { defaultQueue } from "../../queues/registry";
 import { createAuthEmails } from "./service";

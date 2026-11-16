@@ -3,7 +3,7 @@ import { betterAuth } from "better-auth";
 
 import type { PrismaClient } from "@mono/database";
 import { prisma } from "@mono/database";
-import { env } from "@mono/global-config";
+import { env } from "@mono/env";
 import { slugify } from "@mono/utils";
 
 import { authEmails } from "./handler";
