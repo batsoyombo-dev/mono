@@ -1,17 +1,20 @@
-import { config } from "@mono/global-config";
 import { PrismaPg } from "@prisma/adapter-pg";
+
+import { env } from "@mono/global-config";
 
 import { PrismaClient } from "../generated/prisma/client";
 
-const globalForPrisma = globalThis as unknown as { prisma?: PrismaClient };
+export type DatabaseOptions = {
+    /** PostgreSQL connection string. */
+    url: string;
+};
 
-function createPrismaClient(): PrismaClient {
-    return new PrismaClient({ adapter: new PrismaPg({ connectionString: config.DATABASE_URL }) });
+/** Creates a Prisma client. Use it for a second database or a test database. */
+export function createDatabase({ url }: DatabaseOptions): PrismaClient {
+    return new PrismaClient({ adapter: new PrismaPg({ connectionString: url }) });
 }
 
-// Reuse one client across hot reloads in development.
-export const prisma = globalForPrisma.prisma ?? createPrismaClient();
-
-if (config.NODE_ENV !== "production") globalForPrisma.prisma = prisma;
+/** The app's database client. Connections open on the first query, not on import. */
+export const prisma = createDatabase({ url: env.database.DATABASE_URL });
 
 export * from "../generated/prisma/client";

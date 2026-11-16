@@ -1,7 +1,7 @@
 import { AppError, errorHandler } from "@mono/error-handling";
-import { config } from "@mono/global-config";
 import { QueueNameSchema, queues } from "@mono/services";
 
+import { config } from "./config";
 import { syncSchedules } from "./schedules";
 import { DefaultWorker } from "./worker";
 

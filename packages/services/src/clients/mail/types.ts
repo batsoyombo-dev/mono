@@ -1,7 +1,7 @@
 export type EmailOptions = {
     to: string;
     subject: string;
-    /** Overrides MAIL_FROM_ADDRESS. */
+    /** Overrides the client's default sender. */
     from?: string;
 };
 

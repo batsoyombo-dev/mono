@@ -3,11 +3,10 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import handlebars from "handlebars";
-import type { SendMailOptions } from "nodemailer";
+import nodemailer, { type SendMailOptions, type Transporter } from "nodemailer";
 
-import { config } from "@mono/global-config";
+import { env } from "@mono/global-config";
 
-import { getMailTransporter } from "../../utils/mail";
 import type {
     EmailResult,
     EmailWithAttachmentsOptions,
@@ -29,6 +28,24 @@ function stripHtml(html: string): string {
         .trim();
 }
 
+export type MailClientOptions = {
+    smtp: {
+        host: string;
+        port: number;
+        /** TLS on: implicit TLS on port 465, STARTTLS required on any other port. */
+        encryption: boolean;
+        username?: string;
+        password?: string;
+    };
+    /** Default sender when a message sets no `from`. */
+    from: { name: string; address: string };
+    /** Passed to every template as `appName` and `baseUrl`. */
+    appName: string;
+    baseUrl: string;
+};
+
+export type MailClient = ReturnType<typeof createMailClient>;
+
 async function renderTemplate(name: string, data: Record<string, unknown>): Promise<string> {
     if (!templateNamePattern.test(name)) {
         throw new Error(
@@ -43,50 +60,69 @@ async function renderTemplate(name: string, data: Record<string, unknown>): Prom
         compiledTemplates.set(name, template);
     }
 
-    return template({
-        appName: config.APP_NAME,
-        baseUrl: config.BASE_URL,
-        currentYear: new Date().getFullYear(),
-        ...data,
-    });
+    return template({ currentYear: new Date().getFullYear(), ...data });
 }
 
-async function send(options: SendMailOptions): Promise<EmailResult> {
-    const result = await getMailTransporter().sendMail({
-        ...options,
-        from: options.from ?? { name: config.MAIL_FROM_NAME, address: config.MAIL_FROM_ADDRESS },
-    });
+/** Sends email over SMTP. The SMTP connection is created on the first send, not here. */
+export function createMailClient({ smtp, from, appName, baseUrl }: MailClientOptions) {
+    let transporter: Transporter | null = null;
 
-    return { messageId: result.messageId };
+    const getTransporter = (): Transporter =>
+        (transporter ??= nodemailer.createTransport({
+            host: smtp.host,
+            port: smtp.port,
+            secure: smtp.encryption && smtp.port === 465,
+            requireTLS: smtp.encryption && smtp.port !== 465,
+            auth: smtp.username ? { user: smtp.username, pass: smtp.password } : undefined,
+        }));
+
+    async function send(options: SendMailOptions): Promise<EmailResult> {
+        const result = await getTransporter().sendMail({ ...options, from: options.from ?? from });
+        return { messageId: result.messageId };
+    }
+
+    return {
+        sendPlainText({ to, subject, from, text }: PlainTextEmailOptions) {
+            return send({ to, subject, from, text });
+        },
+
+        sendHtml({ to, subject, from, html, text }: HtmlEmailOptions) {
+            return send({ to, subject, from, html, text: text ?? stripHtml(html) });
+        },
+
+        async sendTemplate({ to, subject, from, template, data }: TemplateEmailOptions) {
+            const html = await renderTemplate(template, { appName, baseUrl, ...data });
+            return send({ to, subject, from, html, text: stripHtml(html) });
+        },
+
+        sendWithAttachments({
+            to,
+            subject,
+            from,
+            text,
+            html,
+            attachments,
+        }: EmailWithAttachmentsOptions) {
+            return send({ to, subject, from, text, html, attachments });
+        },
+
+        /** Verifies the SMTP connection and credentials. */
+        async verify(): Promise<void> {
+            await getTransporter().verify();
+        },
+    };
 }
 
-export const mailClient = {
-    sendPlainText({ to, subject, from, text }: PlainTextEmailOptions) {
-        return send({ to, subject, from, text });
+/** The app's mail client, configured from `env.mail` and `env.app`. */
+export const mailClient: MailClient = createMailClient({
+    smtp: {
+        host: env.mail.MAIL_HOST,
+        port: env.mail.MAIL_PORT,
+        encryption: env.mail.MAIL_ENCRYPTION,
+        username: env.mail.MAIL_USERNAME,
+        password: env.mail.MAIL_PASSWORD,
     },
-
-    sendHtml({ to, subject, from, html, text }: HtmlEmailOptions) {
-        return send({ to, subject, from, html, text: text ?? stripHtml(html) });
-    },
-
-    async sendTemplate({ to, subject, from, template, data }: TemplateEmailOptions) {
-        const html = await renderTemplate(template, data);
-        return send({ to, subject, from, html, text: stripHtml(html) });
-    },
-
-    sendWithAttachments({
-        to,
-        subject,
-        from,
-        text,
-        html,
-        attachments,
-    }: EmailWithAttachmentsOptions) {
-        return send({ to, subject, from, text, html, attachments });
-    },
-
-    /** Verifies the SMTP connection and credentials. */
-    async verify(): Promise<void> {
-        await getMailTransporter().verify();
-    },
-};
+    from: { name: env.mail.MAIL_FROM_NAME, address: env.mail.MAIL_FROM_ADDRESS },
+    appName: env.app.APP_NAME,
+    baseUrl: env.app.BASE_URL,
+});

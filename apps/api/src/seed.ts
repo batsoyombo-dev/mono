@@ -1,3 +1,6 @@
+// Validate the environment before any package that reads it is loaded.
+import "./config";
+
 import { prisma } from "@mono/database";
 import { logger } from "@mono/logger";
 

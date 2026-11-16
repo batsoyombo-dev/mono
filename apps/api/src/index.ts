@@ -1,6 +1,8 @@
+// Validate the environment before any package that reads it is loaded.
+import { config } from "./config";
+
 import { prisma } from "@mono/database";
 import { errorHandler } from "@mono/error-handling";
-import { config } from "@mono/global-config";
 import { logger } from "@mono/logger";
 import { auth, queues, queueService, userService } from "@mono/services";
 

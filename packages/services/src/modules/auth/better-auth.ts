@@ -1,32 +1,74 @@
 import { prismaAdapter } from "@better-auth/prisma-adapter";
 import { betterAuth } from "better-auth";
 
+import type { PrismaClient } from "@mono/database";
 import { prisma } from "@mono/database";
-import { config } from "@mono/global-config";
+import { env } from "@mono/global-config";
 import { slugify } from "@mono/utils";
 
-import { queuePasswordResetEmail, queueVerificationEmail } from "./handler";
+import { authEmails } from "./handler";
+import type { AuthEmails } from "./types";
 
-type AuthOptions = {
+/** Where an auth instance is mounted and who may sign up there. */
+export type AuthSurface = {
     /** Mount path; must match the controller prefix the handler is served under. */
     basePath: string;
     cookiePrefix: string;
     disableSignUp: boolean;
 };
 
+/** What every auth instance shares. Defaults to the app's database, emails and `env`. */
+export type AuthDeps = {
+    prisma: PrismaClient;
+    emails: AuthEmails;
+    appName: string;
+    /** Public origin of the API, used for callback and email links. */
+    baseUrl: string;
+    secret: string;
+    trustedOrigins: string[];
+    /** Enables Google sign-in when set. */
+    google?: { clientId: string; clientSecret: string };
+};
+
+function defaultAuthDeps(): AuthDeps {
+    const { BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = env.auth;
+
+    return {
+        prisma,
+        emails: authEmails,
+        appName: env.app.APP_NAME,
+        baseUrl: env.app.BASE_URL,
+        secret: BETTER_AUTH_SECRET,
+        trustedOrigins: env.app.CORS_ORIGINS,
+        google:
+            GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET
+                ? { clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET }
+                : undefined,
+    };
+}
+
 /**
  * Builds a Better Auth instance. Call it again with a different basePath and cookiePrefix to
  * add an isolated auth surface (for example an admin panel with sign-up disabled).
  */
-export function createAuth({ basePath, cookiePrefix, disableSignUp }: AuthOptions) {
-    const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = config;
-
+export function createAuth(
+    { basePath, cookiePrefix, disableSignUp }: AuthSurface,
+    {
+        prisma,
+        emails,
+        appName,
+        baseUrl,
+        secret,
+        trustedOrigins,
+        google,
+    }: AuthDeps = defaultAuthDeps()
+) {
     return betterAuth({
-        appName: config.APP_NAME,
-        baseURL: config.BASE_URL,
+        appName,
+        baseURL: baseUrl,
         basePath,
-        secret: config.BETTER_AUTH_SECRET,
-        trustedOrigins: config.CORS_ORIGINS,
+        secret,
+        trustedOrigins,
         database: prismaAdapter(prisma, {
             provider: "postgresql",
         }),
@@ -41,7 +83,7 @@ export function createAuth({ basePath, cookiePrefix, disableSignUp }: AuthOption
             sendOnSignUp: true,
             autoSignInAfterVerification: true,
             sendVerificationEmail: async ({ user, url }) => {
-                await queueVerificationEmail({
+                await emails.queueVerificationEmail({
                     email: user.email,
                     name: user.name,
                     verificationUrl: url,
@@ -56,22 +98,14 @@ export function createAuth({ basePath, cookiePrefix, disableSignUp }: AuthOption
             maxPasswordLength: 128,
             revokeSessionsOnPasswordReset: true,
             sendResetPassword: async ({ user, url }) => {
-                await queuePasswordResetEmail({
+                await emails.queuePasswordResetEmail({
                     email: user.email,
                     name: user.name,
                     resetUrl: url,
                 });
             },
         },
-        socialProviders:
-            GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET
-                ? {
-                      google: {
-                          clientId: GOOGLE_CLIENT_ID,
-                          clientSecret: GOOGLE_CLIENT_SECRET,
-                      },
-                  }
-                : undefined,
+        socialProviders: google ? { google } : undefined,
         account: {
             encryptOAuthTokens: true,
             accountLinking: {
@@ -86,8 +120,10 @@ export function createAuth({ basePath, cookiePrefix, disableSignUp }: AuthOption
     });
 }
 
-export const auth = createAuth({
+export type Auth = ReturnType<typeof createAuth>;
+
+export const auth: Auth = createAuth({
     basePath: "/api/v1/auth",
-    cookiePrefix: slugify(config.APP_NAME),
+    cookiePrefix: slugify(env.app.APP_NAME),
     disableSignUp: false,
 });

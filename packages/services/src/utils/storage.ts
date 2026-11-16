@@ -7,7 +7,8 @@ import {
     S3Client,
     S3ServiceException,
 } from "@aws-sdk/client-s3";
-import { config } from "@mono/global-config";
+
+import { env } from "@mono/global-config";
 
 export type S3StorageConfigProps = {
     bucketName: string;
@@ -86,22 +87,20 @@ export class S3Storage {
     }
 }
 
-let storage: S3Storage | null = null;
+/** Returns S3 storage, or `null` when the app has not configured it (all fields optional). */
+export function createStorage(
+    options: Partial<S3StorageConfigProps> | undefined
+): S3Storage | null {
+    const { accessKeyId, secretAccessKey, bucketName, region, visibility } = options ?? {};
+    if (!accessKeyId || !secretAccessKey || !bucketName || !region) return null;
 
-/** Returns the shared S3 storage, failing loudly when the AWS_* variables are not configured. */
-export function getStorage(): S3Storage {
-    if (storage) return storage;
-
-    const { AWS_ACCESS_KEY, AWS_SECRET_KEY, AWS_BUCKET_NAME, AWS_REGION } = config;
-    if (!AWS_ACCESS_KEY || !AWS_SECRET_KEY || !AWS_BUCKET_NAME || !AWS_REGION) {
-        throw new Error("S3 storage is not configured: set the AWS_* environment variables");
-    }
-
-    storage = new S3Storage({
-        accessKeyId: AWS_ACCESS_KEY,
-        secretAccessKey: AWS_SECRET_KEY,
-        bucketName: AWS_BUCKET_NAME,
-        region: AWS_REGION,
-    });
-    return storage;
+    return new S3Storage({ accessKeyId, secretAccessKey, bucketName, region, visibility });
 }
+
+/** The app's S3 storage, or `null` when the `AWS_*` variables are not set. */
+export const storage: S3Storage | null = createStorage({
+    accessKeyId: env.storage.AWS_ACCESS_KEY,
+    secretAccessKey: env.storage.AWS_SECRET_KEY,
+    bucketName: env.storage.AWS_BUCKET_NAME,
+    region: env.storage.AWS_REGION,
+});

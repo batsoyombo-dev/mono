@@ -1,6 +1,5 @@
 import type { Job, JobsOptions, QueueOptions } from "bullmq";
 import { Queue } from "bullmq";
-import { config } from "@mono/global-config";
 
 import type { InferJobs, JobSchemas } from "./job-schemas";
 import { parseJobData } from "./job-schemas";
@@ -15,10 +14,9 @@ export class TypedQueue<S extends JobSchemas> {
     constructor(
         readonly name: Queues,
         readonly schemas: S,
-        opts?: Omit<QueueOptions, "connection">
+        opts: QueueOptions
     ) {
         this.queue = new Queue(name, {
-            connection: { url: config.REDIS_URL },
             defaultJobOptions: {
                 attempts: 3,
                 backoff: { type: "exponential", delay: 1000 },

@@ -1,3 +1,6 @@
+// Validate the environment before any package that reads it is loaded.
+import "./config";
+
 import { parseArgs } from "node:util";
 
 import { errorHandler } from "@mono/error-handling";

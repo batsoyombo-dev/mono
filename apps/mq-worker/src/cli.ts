@@ -4,6 +4,9 @@
  *
  *   bun run queue help
  */
+// Validate the environment before any package that reads it is loaded.
+import "./config";
+
 import { parseArgs } from "node:util";
 
 import { AppError, ValidationError } from "@mono/error-handling";

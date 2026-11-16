@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 
-import { config } from "@mono/global-config";
+import { env } from "@mono/global-config";
 import { logger } from "@mono/logger";
 import { Redis } from "ioredis";
 
-type CacheOptions = {
+export type CacheOptions = {
     url: string;
     prefix?: string;
 };
@@ -138,7 +138,8 @@ export class RedisCache {
     }
 }
 
-export const cache = new RedisCache({ url: config.REDIS_URL });
+/** The app's cache. Connects on the first command, not on import. */
+export const cache = new RedisCache({ url: env.redis.REDIS_URL });
 
 /**
  * Builds a deterministic cache key: `ck("users", { page: 1 }, "v1")` -> `v1:users?page=1`.

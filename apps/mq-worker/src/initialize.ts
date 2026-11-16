@@ -1,11 +1,6 @@
-import type { JobNames } from "@mono/services";
+import { mailClient } from "@mono/services";
 
-import { HealthJob, MailJob } from "./jobs";
-import type { JobDef } from "./jobs/job.def";
+import { createJobMap } from "./job-map";
 
-// Every job name in the @mono/services queue registry must have a handler here (type-checked).
-// Payload schemas live in @mono/services (queueJobSchemas) and are checked before `handle` runs.
-export const jobMap = {
-    health: HealthJob,
-    mail: MailJob,
-} satisfies Record<JobNames, JobDef<never>>;
+/** The worker's job handlers, wired to the app's real clients. */
+export const jobMap = createJobMap({ mail: mailClient });

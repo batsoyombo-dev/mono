@@ -1,75 +1,85 @@
 import { z } from "zod";
 
-import { logLevel, nodeEnv } from "./runtime";
+import type { EnvGroupName, EnvGroups, EnvSchema } from "./groups";
+import { envGroups } from "./groups";
 
-// Empty strings in .env mean "not configured" for optional integrations.
-const optional = <T extends z.ZodType>(schema: T) =>
-    z.preprocess((value) => (value === "" ? undefined : value), schema.optional());
+type EnvSource = Record<string, string | undefined>;
 
-const commaSeparatedUrls = z
-    .string()
-    .transform((value) =>
-        value
-            .split(",")
-            .map((entry) => entry.trim())
-            .filter(Boolean)
-    )
-    .pipe(z.array(z.url()));
+/** The parsed, read-only values of an {@link EnvSchema}. */
+export type Env<S extends EnvSchema> = Readonly<z.output<z.ZodObject<S>>>;
 
-const commaSeparatedEmails = z
-    .string()
-    .transform((value) =>
-        value
-            .split(",")
-            .map((entry) => entry.trim().toLowerCase())
-            .filter(Boolean)
-    )
-    .pipe(z.array(z.email()));
+type UnionToIntersection<U> = (U extends unknown ? (value: U) => void : never) extends (
+    value: infer I
+) => void
+    ? I
+    : never;
 
-const _env = z.object({
-    NODE_ENV: nodeEnv,
-    LOG_LEVEL: logLevel,
-    APP_NAME: z.string().min(1).default("Mono"),
-    SERVER_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
-    BASE_URL: z.url(),
-    CORS_ORIGINS: commaSeparatedUrls.default([]),
+/** The parsed variables of the chosen groups as one flat object. */
+type GroupsEnv<G extends EnvGroupName> = UnionToIntersection<{ [K in G]: Env<EnvGroups[K]> }[G]>;
 
-    DATABASE_URL: z.url(),
-    REDIS_URL: z.url(),
+function parseEnv<S extends EnvSchema>(owner: string, schema: S, source: EnvSource): Env<S> {
+    const parsed = z.object(schema).safeParse(source);
 
-    BETTER_AUTH_SECRET: z.string().min(32),
-    /** Verified users with these emails can use the queue admin API and dashboard. */
-    ADMIN_EMAILS: commaSeparatedEmails.default([]),
+    if (!parsed.success) {
+        throw new Error(
+            `Invalid environment variables for ${owner}:\n${z.prettifyError(parsed.error)}`
+        );
+    }
 
-    MAIL_HOST: z.string().min(1),
-    MAIL_PORT: z.coerce.number().int().min(1).max(65535),
-    MAIL_USERNAME: optional(z.string()),
-    MAIL_PASSWORD: optional(z.string()),
-    MAIL_ENCRYPTION: z
-        .enum(["true", "false", "1", "0", "tls", "ssl", "starttls", "none"])
-        .default("true")
-        .transform((value) => ["true", "1", "tls", "ssl", "starttls"].includes(value)),
-    MAIL_FROM_NAME: z.string().min(1),
-    MAIL_FROM_ADDRESS: z.email(),
-
-    GOOGLE_CLIENT_ID: optional(z.string()),
-    GOOGLE_CLIENT_SECRET: optional(z.string()),
-
-    AWS_ACCESS_KEY: optional(z.string()),
-    AWS_SECRET_KEY: optional(z.string()),
-    AWS_BUCKET_NAME: optional(z.string()),
-    AWS_REGION: optional(z.string()),
-});
-
-const parsed = _env.safeParse(process.env);
-
-if (!parsed.success) {
-    // Print every invalid variable at once, before anything else boots.
-    console.error("Invalid environment variables:\n" + z.prettifyError(parsed.error));
-    throw new Error("Invalid environment variables");
+    return Object.freeze(parsed.data) as Env<S>;
 }
 
-export const config = parsed.data;
-export type Config = typeof config;
+const groupCache = new Map<EnvGroupName, unknown>();
 
+/**
+ * Typed environment for packages, one property per group: `env.redis.REDIS_URL`. A group is
+ * validated the first time it is read, so importing this never throws and code only fails on
+ * the variables it actually uses.
+ */
+export const env = Object.freeze(
+    Object.defineProperties(
+        {},
+        Object.fromEntries(
+            (Object.keys(envGroups) as EnvGroupName[]).map((name) => [
+                name,
+                {
+                    enumerable: true,
+                    get: () => {
+                        if (!groupCache.has(name)) {
+                            groupCache.set(name, parseEnv(name, envGroups[name], process.env));
+                        }
+                        return groupCache.get(name);
+                    },
+                },
+            ])
+        )
+    )
+) as { readonly [K in EnvGroupName]: Env<EnvGroups[K]> };
+
+type DefineEnvOptions<G extends EnvGroupName, E extends EnvSchema> = {
+    /** Groups this app needs. Defaults to every group. */
+    groups?: readonly G[];
+    /** Variables only this app reads, such as `SERVER_PORT`. */
+    extend?: E;
+    /** Where to read from. Defaults to `process.env`; tests pass a plain object. */
+    source?: EnvSource;
+};
+
+/**
+ * An app's environment: the groups it runs plus its own variables, validated together so one
+ * error lists every problem. Returns a flat, typed object (`config.SERVER_PORT`). Each entry
+ * point imports the app's config first, so a bad `.env` fails before any package loads.
+ */
+export function defineEnv<
+    G extends EnvGroupName = EnvGroupName,
+    E extends EnvSchema = Record<never, never>,
+>(owner: string, options: DefineEnvOptions<G, E> = {}): GroupsEnv<G> & Env<E> {
+    const groups = options.groups ?? (Object.keys(envGroups) as G[]);
+    const schema = Object.assign({}, ...groups.map((name) => envGroups[name]), options.extend);
+
+    return parseEnv(owner, schema, options.source ?? process.env) as GroupsEnv<G> & Env<E>;
+}
+
+export { envGroups, type EnvGroupName, type EnvSchema } from "./groups";
+export { commaSeparated, optional, port } from "./helpers";
 export { runtimeConfig, type RuntimeConfig } from "./runtime";
