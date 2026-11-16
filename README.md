@@ -50,6 +50,7 @@ packages/
 | `bun run lint` / `bun run lint:fix`         | ESLint                                   |
 | `bun run format` / `bun run format:fix`     | Prettier                                 |
 | `bun run test`                              | `bun test` across the repo               |
+| `bun run verify`                            | Format check, types, lint and tests      |
 | `bun run db:migrate -- --name <name>`       | Create and apply a development migration |
 | `bun run db:deploy`                         | Apply pending migrations                 |
 | `bun run db:studio`                         | Open Prisma Studio                       |
@@ -58,53 +59,9 @@ packages/
 
 Every app reads the single root `.env` (`bun --env-file=../../.env`). In production, set real environment variables instead.
 
-## Conventions
+## Working in this repo
 
-### API responses
-
-Every response uses one envelope, built by `apps/api/src/utils/response.ts`:
-
-```json
-{ "success": true, "status": 200, "data": { ... } }
-{ "success": false, "status": 422, "error": { "message": "Validation failed", "issues": [...] } }
-```
-
-Throw `AppError` subclasses from `@mono/error-handling` (`NotFoundError`, `ForbiddenError`, `ConflictError`, ...). The error plugin maps them to the right status. Unknown errors become a logged 500.
-
-### Adding a feature module
-
-1. `packages/database/prisma/schema.prisma`: add the model, then run `bun run db:migrate -- --name <name>`.
-2. `packages/services/src/repositories/<name>.repository.ts`: extend `BaseRepository` and export it from `repositories/index.ts`.
-3. `packages/services/src/modules/<name>/`:
-    - `schema.ts`: zod input schemas.
-    - `types.ts`: `z.infer` payloads, `*Input` types (payload + `actorUserId`), response types, and a `<Name>Operations` type listing the service functions.
-    - `handler.ts`: the functions, exported as `export const <name>Service: <Name>Operations = { ... }`.
-    - `index.ts`: re-exports. Then add the module to `modules/index.ts`.
-4. `apps/api/src/controllers/<name>.controller.ts`: `create<Name>Controller({ auth, <name> })` returns an `Elysia` instance. Import schemas and types from `@mono/services/<name>/schema` and `@mono/services/<name>/types` so controllers stay free of runtime service imports.
-5. Wire it in `controllers/index.ts` (`ApiDependencies` + `createApi`) and pass the real service in `apps/api/src/index.ts`.
-6. Test it in `apps/api/tests` with `createApp({ ..., <name>: fakeService })` and `app.handle(new Request(...))`. No database needed.
-
-`src/modules/user` is the reference implementation.
-
-### Background jobs
-
-1. Add a zod schema to `packages/services/src/queues/default/schemas.ts` and register its type in `DefaultQueueJobs`.
-2. Add a handler in `apps/mq-worker/src/jobs/` and register it in `apps/mq-worker/src/initialize.ts` (type-checked: every job name must have a handler).
-3. Enqueue it with `defaultQueue.add("<job>", data)`.
-
-For a new queue, add its name to `QueueNameSchema`, create a `TypedQueue`, and add it to `QueueMap`, the worker's `queues` map, and `schedules`. Run one worker process per queue with `--queue <name>`.
-
-### Cron jobs
-
-Add an entry to `apps/mq-worker/src/schedules.ts`. Schedules are BullMQ job schedulers stored in Redis, so running several worker instances never double-fires a tick. Schedules removed from the file are removed from Redis on the next worker start.
-
-### Auth
-
-Better Auth is mounted at `/api/v1/auth/*` (email/password with email verification, and Google when `GOOGLE_CLIENT_*` are set). Protected controllers call `getAuthorizedSessionUserId(auth, request)`. To add another isolated surface, such as an admin panel with sign-up disabled, call `createAuth({ basePath, cookiePrefix, disableSignUp })` again and mount it under its own prefix.
-
-### Configuration
-
-Add new environment variables to `packages/global-config/src/index.ts` and `.env.example`. Wrap optional integrations in `optional(...)` so an empty value disables them instead of failing boot.
+This repo is set up for AI coding agents. [AGENTS.md](AGENTS.md) is the contract: architecture, the rules that ESLint enforces, recipes for modules, jobs and cron, and what "done" means. `CLAUDE.md` imports it. Read it before adding code, whether you are a person or an agent.
 
 ## Deployment
 

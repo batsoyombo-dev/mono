@@ -34,6 +34,7 @@
         "format": "prettier --check \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
         "format:fix": "prettier --write \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
         "test": "bun test",
+        "verify": "bun run format && bun run check-types && bun run lint && bun run test",
         "clean": "find . -type d \\( -name node_modules -o -name dist -o -name .turbo \\) -prune -exec rm -rf {} +"
     },
     "devDependencies": {
