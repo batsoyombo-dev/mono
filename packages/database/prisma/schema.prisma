@@ -1,7 +1,5 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Get a free hosted Postgres database in seconds: `npx create-db`
+// Prisma schema: https://pris.ly/d/prisma-schema
+// User, Session, Account and Verification are the Better Auth core tables.
 
 generator client {
   provider = "prisma-client"
@@ -13,106 +11,66 @@ datasource db {
 }
 
 model User {
-  id                     Int                     @id @default(autoincrement())
-  email                  String                  @unique @db.VarChar(128)
-  deletedAt              DateTime?               @map("deleted_at")
-  actionEvents           ActionEvent[]
-  notificationRecipients NotificationRecipient[]
+  id            Int      @id @default(autoincrement())
+  name          String   @db.VarChar(120)
+  email         String   @unique @db.VarChar(254)
+  emailVerified Boolean  @default(false) @map("email_verified")
+  image         String?  @db.Text
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
 
-  @@index([deletedAt])
+  accounts Account[]
+  sessions Session[]
+
+  @@map("users")
 }
 
-model ActionEvent {
-  id       Int @id @default(autoincrement()) @map("id")
-  actorId  Int @map("actor_id")
-  entityId Int @map("entity_id")
-
-  context        Json?   @map("context")
-  entitySnapshot Json?   @map("entity_snapshot")
-  externalKey    String? @unique @map("external_key")
-  verb           String  @map("verb") @db.VarChar(32)
-  entityType     String  @map("entity_type") @db.VarChar(32)
-
-  createdAt DateTime @default(now()) @map("created_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  notifications Notification[]
-  actor         User           @relation(fields: [actorId], references: [id])
-
-  @@index([entityId, createdAt])
-  @@index([actorId, createdAt])
-  @@index([verb, createdAt])
-  @@index([deletedAt])
-  @@map("action_events")
-}
-
-model Notification {
-  id            Int @id @default(autoincrement()) @map("id")
-  actionEventId Int @map("action_event_id")
-
-  dedupeKey String? @unique @map("dedupe_key")
-  template  String? @map("template")
-  payload   Json?   @map("payload")
-
-  deliveryMethods String[]  @default([]) @map("delivery_methods")
-  priority        String    @map("priority") @db.VarChar(32)
-  status          String    @map("status") @db.VarChar(32)
-  scheduledFor    DateTime? @map("scheduled_for")
-  expiresAt       DateTime? @map("expires_at")
-  deletedAt       DateTime? @map("deleted_at")
-
+model Session {
+  id        Int      @id @default(autoincrement())
+  userId    Int      @map("user_id")
+  token     String   @unique @db.Text
+  expiresAt DateTime @map("expires_at")
+  ipAddress String?  @map("ip_address") @db.VarChar(64)
+  userAgent String?  @map("user_agent") @db.Text
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  actionEvent     ActionEvent             @relation(fields: [actionEventId], references: [id])
-  recipients      NotificationRecipient[]
-  deliveryResults DeliveryResult[]
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([actionEventId, createdAt])
-  @@index([status, scheduledFor])
-  @@index([deletedAt])
-  @@map("notifications")
+  @@index([userId, expiresAt])
+  @@map("sessions")
 }
 
-model NotificationRecipient {
-  id             Int @id @default(autoincrement()) @map("id")
-  notificationId Int @map("notification_id")
-  userId         Int @map("user_id")
+model Account {
+  id                    Int       @id @default(autoincrement())
+  userId                Int       @map("user_id")
+  providerId            String    @map("provider_id") @db.VarChar(64)
+  accountId             String    @map("account_id") @db.VarChar(255)
+  password              String?   @db.Text
+  accessToken           String?   @map("access_token") @db.Text
+  refreshToken          String?   @map("refresh_token") @db.Text
+  idToken               String?   @map("id_token") @db.Text
+  accessTokenExpiresAt  DateTime? @map("access_token_expires_at")
+  refreshTokenExpiresAt DateTime? @map("refresh_token_expires_at")
+  scope                 String?   @db.Text
+  createdAt             DateTime  @default(now()) @map("created_at")
+  updatedAt             DateTime  @updatedAt @map("updated_at")
 
-  readAt DateTime? @map("read_at")
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  recipientData Json? @map("recipient_data")
-
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
-  deletedAt DateTime? @map("deleted_at")
-
-  user            User             @relation(fields: [userId], references: [id])
-  notification    Notification     @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-  deliveryResults DeliveryResult[]
-
-  @@unique([notificationId, userId])
-  @@index([notificationId, userId])
-  @@index([deletedAt])
-  @@map("notification_recipients")
+  @@unique([providerId, accountId])
+  @@index([userId])
+  @@map("accounts")
 }
 
-model DeliveryResult {
-  id             Int  @id @default(autoincrement()) @map("id")
-  notificationId Int  @map("notification_id")
-  recipientId    Int? @map("recipient_id")
+model Verification {
+  id         Int      @id @default(autoincrement())
+  identifier String   @db.Text
+  value      String   @db.Text
+  expiresAt  DateTime @map("expires_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
 
-  deliveryMethod String   @map("delivery_method") @db.VarChar(32)
-  success        Boolean  @map("success")
-  deliveryId     String?  @map("delivery_id")
-  errorMessage   String?  @map("error_message")
-  retryCount     Int      @default(0) @map("retry_count")
-  deliveredAt    DateTime @default(now()) @map("delivered_at")
-
-  notification Notification           @relation(fields: [notificationId], references: [id], onDelete: Cascade)
-  recipient    NotificationRecipient? @relation(fields: [recipientId], references: [id])
-
-  @@index([notificationId, deliveryMethod])
-  @@index([success, deliveredAt])
-  @@map("delivery_results")
+  @@index([identifier, expiresAt])
+  @@map("verifications")
 }

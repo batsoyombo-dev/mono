@@ -10,12 +10,11 @@
         "lint:fix": "eslint . --fix",
         "check-types": "tsc --noEmit"
     },
+    "dependencies": {
+        "winston": "^3.19.0"
+    },
     "devDependencies": {
         "@mono/eslint-config": "*",
         "@mono/typescript-config": "*"
-    },
-    "dependencies": {
-        "@mono/global-config": "*",
-        "winston": "^3.19.0"
     }
 }

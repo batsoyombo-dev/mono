@@ -1,44 +1,27 @@
-import "dotenv/config";
-import { createServer } from "node:http";
-
+import { prisma } from "@mono/database";
 import { errorHandler } from "@mono/error-handling";
 import { config } from "@mono/global-config";
 import { logger } from "@mono/logger";
+import { auth, defaultQueue, userService } from "@mono/services";
 
-const allowedOrigins = new Set(
-    config.CORS_ORIGINS.split(",")
-        .map((origin) => origin.trim())
-        .filter(Boolean)
-);
+import { createApp } from "./app";
 
-const server = createServer((request, response) => {
-    const origin = request.headers.origin;
-    if (origin && allowedOrigins.has(origin)) {
-        response.setHeader("Access-Control-Allow-Origin", origin);
-        response.setHeader("Vary", "Origin");
-    }
-
-    if (request.method === "OPTIONS") {
-        response.writeHead(204, {
-            "Access-Control-Allow-Methods": "GET, OPTIONS",
-            "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        });
-        response.end();
-        return;
-    }
-
-    if (request.method === "GET" && request.url === "/health") {
-        response.writeHead(200, { "Content-Type": "application/json" });
-        response.end(JSON.stringify({ status: "ok" }));
-        return;
-    }
-
-    response.writeHead(404, { "Content-Type": "application/json" });
-    response.end(JSON.stringify({ error: "Not found" }));
+const app = createApp({
+    allowedOrigins: config.CORS_ORIGINS,
+    auth: {
+        handler: auth.handler,
+        getSession: (headers) => auth.api.getSession({ headers }),
+    },
+    users: userService,
 });
 
-errorHandler.listenToErrorEvents(server);
-
-server.listen(config.SERVER_PORT, () => {
-    logger.info(`API listening on port ${config.SERVER_PORT}`);
+errorHandler.registerShutdownHandler(async () => {
+    await app.stop();
+    await defaultQueue.close();
+    await prisma.$disconnect();
 });
+errorHandler.listenToErrorEvents();
+
+app.listen(config.SERVER_PORT);
+
+logger.info(`API listening on ${config.BASE_URL}`);

@@ -5,9 +5,9 @@ export const healthSchema = z.object({
 });
 
 export const mailSchema = z.object({
-    to: z.string(),
-    subject: z.string(),
+    to: z.email(),
+    subject: z.string().min(1),
     from: z.string().optional(),
-    template: z.string(),
-    data: z.record(z.string(), z.any()),
+    template: z.string().min(1),
+    data: z.record(z.string(), z.unknown()),
 });

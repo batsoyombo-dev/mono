@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Prisma } from "@mono/database";
+import { NotFoundError } from "@mono/error-handling";
 
 import type { PaginationRequest, PaginationResponse } from "@mono/utils";
 import { serializePagination } from "@mono/utils";
@@ -7,6 +8,7 @@ import { serializePagination } from "@mono/utils";
 type Tx = Prisma.TransactionClient;
 
 type BaseRepositoryOptions = {
+    /** Requires a nullable `deletedAt` column; deletes then set it instead of removing rows. */
     softDelete?: boolean;
 };
 
@@ -134,7 +136,7 @@ export abstract class BaseRepository<T> {
         const record = await this.getOne(args, transaction);
 
         if (!record) {
-            throw new Error("Өгөгдөл олдсонгүй!");
+            throw new NotFoundError();
         }
 
         return record as NonNullable<Prisma.Result<T, A, "findFirst">>;
@@ -194,7 +196,7 @@ export abstract class BaseRepository<T> {
         const record = await this.getOneById(id, args, transaction);
 
         if (!record) {
-            throw new Error("Өгөгдөл олдсонгүй!");
+            throw new NotFoundError();
         }
 
         return record as NonNullable<typeof record>;

@@ -13,11 +13,19 @@ export async function makeUniqueSlug(
     return slug;
 }
 
+const randomStringChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+
+/**
+ * Returns a cryptographically random alphanumeric string, safe for tokens and codes.
+ */
 export function randomString(length: number): string {
-    const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-    return Array.from({ length }, () =>
-        chars.charAt(Math.floor(Math.random() * chars.length))
-    ).join("");
+    const bytes = crypto.getRandomValues(new Uint8Array(length));
+    // 248 is the largest multiple of 62 below 256, so rejecting higher bytes avoids modulo bias.
+    let result = "";
+    for (const byte of bytes) {
+        if (byte < 248) result += randomStringChars[byte % randomStringChars.length];
+    }
+    return result.length === length ? result : result + randomString(length - result.length);
 }
 
 export function generateUuid() {

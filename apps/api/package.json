@@ -1,23 +1,27 @@
 {
     "name": "api",
-    "version": "1.0.0",
+    "version": "0.0.0",
     "type": "module",
+    "private": true,
     "scripts": {
-        "dev": "bun --watch src/index.ts",
+        "dev": "bun --env-file=../../.env --watch src/index.ts",
         "start": "bun dist/index.js",
-        "build": "bun build ./src/index.ts --outdir dist --target bun --sourcemap",
+        "build": "bun build ./src/index.ts --outdir dist --target bun --sourcemap=linked",
+        "seed": "bun --env-file=../../.env src/seed.ts",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
         "check-types": "tsc --noEmit"
     },
     "dependencies": {
-        "@mono/services": "*",
-        "@mono/global-config": "*",
-        "@mono/cache": "*",
+        "@elysia/cors": "^1.4.2",
+        "@mono/database": "*",
         "@mono/error-handling": "*",
+        "@mono/global-config": "*",
         "@mono/logger": "*",
-        "@mono/utils": "*",
-        "dotenv": "catalog:"
+        "@mono/services": "*",
+        "@sinclair/typebox": "^0.34.52",
+        "better-auth": "^1.7.7",
+        "elysia": "^1.4.30"
     },
     "devDependencies": {
         "@mono/eslint-config": "*",

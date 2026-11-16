@@ -1,23 +1,20 @@
-import "dotenv/config";
-import minimist from "minimist";
+import { parseArgs } from "node:util";
 
 import { errorHandler } from "@mono/error-handling";
 import { logger } from "@mono/logger";
 
 import { startQueueService } from "./start";
 
-const args = minimist(process.argv.slice(2));
+const { values } = parseArgs({
+    options: { queue: { type: "string", default: "default" } },
+    strict: false,
+});
 
-const queueName = args.queue || "default";
-
-async function start() {
-    return Promise.all([startQueueService(queueName)]);
-}
-
-start()
-    .then(() => {
-        logger.info(`${queueName} worker is running. UTC: ${new Date()}`);
+startQueueService(String(values.queue))
+    .then((queueName) => {
+        logger.info(`${queueName} worker is running`);
     })
-    .catch((error) => {
-        void errorHandler.handleError(error);
+    .catch(async (error: unknown) => {
+        await errorHandler.handleError(error);
+        process.exit(1);
     });

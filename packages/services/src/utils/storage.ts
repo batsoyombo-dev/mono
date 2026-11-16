@@ -20,12 +20,12 @@ export type S3StorageConfigProps = {
 export class S3Storage {
     client: S3Client;
 
-    constructor(private config: S3StorageConfigProps) {
+    constructor(private readonly options: S3StorageConfigProps) {
         this.client = new S3Client({
-            region: this.config.region,
+            region: this.options.region,
             credentials: {
-                accessKeyId: this.config.accessKeyId,
-                secretAccessKey: this.config.secretAccessKey,
+                accessKeyId: this.options.accessKeyId,
+                secretAccessKey: this.options.secretAccessKey,
             },
         });
     }
@@ -33,9 +33,9 @@ export class S3Storage {
     public put(path: string, file: Buffer) {
         return this.client.send(
             new PutObjectCommand({
-                Bucket: this.config.bucketName,
+                Bucket: this.options.bucketName,
                 Key: path,
-                ...(this.config.visibility ? { ACL: this.config.visibility } : {}),
+                ...(this.options.visibility ? { ACL: this.options.visibility } : {}),
                 Body: file,
             })
         );
@@ -45,7 +45,7 @@ export class S3Storage {
         try {
             await this.client.send(
                 new HeadObjectCommand({
-                    Bucket: this.config.bucketName,
+                    Bucket: this.options.bucketName,
                     Key: path,
                 })
             );
@@ -64,7 +64,7 @@ export class S3Storage {
     public delete(path: string) {
         return this.client.send(
             new DeleteObjectCommand({
-                Bucket: this.config.bucketName,
+                Bucket: this.options.bucketName,
                 Key: path,
             })
         );
@@ -73,7 +73,7 @@ export class S3Storage {
     public async get(path: string): Promise<Buffer> {
         const response = await this.client.send(
             new GetObjectCommand({
-                Bucket: this.config.bucketName,
+                Bucket: this.options.bucketName,
                 Key: path,
             })
         );
@@ -86,9 +86,22 @@ export class S3Storage {
     }
 }
 
-export const s3Storage = new S3Storage({
-    accessKeyId: config.AWS_ACCESS_KEY,
-    bucketName: config.AWS_BUCKET_NAME,
-    region: config.AWS_REGION,
-    secretAccessKey: config.AWS_SECRET_KEY,
-});
+let storage: S3Storage | null = null;
+
+/** Returns the shared S3 storage, failing loudly when the AWS_* variables are not configured. */
+export function getStorage(): S3Storage {
+    if (storage) return storage;
+
+    const { AWS_ACCESS_KEY, AWS_SECRET_KEY, AWS_BUCKET_NAME, AWS_REGION } = config;
+    if (!AWS_ACCESS_KEY || !AWS_SECRET_KEY || !AWS_BUCKET_NAME || !AWS_REGION) {
+        throw new Error("S3 storage is not configured: set the AWS_* environment variables");
+    }
+
+    storage = new S3Storage({
+        accessKeyId: AWS_ACCESS_KEY,
+        secretAccessKey: AWS_SECRET_KEY,
+        bucketName: AWS_BUCKET_NAME,
+        region: AWS_REGION,
+    });
+    return storage;
+}

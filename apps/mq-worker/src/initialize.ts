@@ -1,9 +1,12 @@
+import type { z } from "zod";
+
 import type { JobNames } from "@mono/services";
 import { healthSchema, mailSchema } from "@mono/services";
 
 import { HealthJob, MailJob } from "./jobs";
 import type { JobDef } from "./jobs/job.def";
 
+// Every job name declared in @mono/services queues must have a handler here.
 export const jobMap = {
     health: {
         schema: healthSchema,
@@ -13,5 +16,4 @@ export const jobMap = {
         schema: mailSchema,
         job: MailJob,
     },
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-} satisfies Record<JobNames, { schema: unknown; job: JobDef<any> }>;
+} satisfies Record<JobNames, { schema: z.ZodType; job: JobDef<never> }>;

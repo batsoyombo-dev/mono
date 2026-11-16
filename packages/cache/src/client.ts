@@ -1,37 +1,45 @@
-import { randomBytes, randomUUID } from "crypto";
+import { randomUUID } from "node:crypto";
 
 import { config } from "@mono/global-config";
+import { logger } from "@mono/logger";
 import { createClient, type RedisClientType } from "redis";
 
-let redisClient: RedisClientType | null = null;
-
 type CacheOptions = {
-    url?: string;
+    url: string;
     prefix?: string;
-    password?: string;
 };
 
-function getRedisClient(options: CacheOptions): RedisClientType {
-    if (!redisClient) {
-        redisClient = createClient({
-            url: options.url || "redis://localhost:6379",
-            password: options.password ?? undefined,
-        });
-        redisClient.connect().catch(console.error);
-    }
-    return redisClient;
-}
+// Deletes the lock only when it still holds our token, so we never release someone else's lock.
+const RELEASE_LOCK_SCRIPT = `
+    if redis.call("get", KEYS[1]) == ARGV[1] then
+        return redis.call("del", KEYS[1])
+    else
+        return 0
+    end
+`;
 
 export class RedisCache {
-    private client: RedisClientType;
-    private prefix: string;
+    private readonly client: RedisClientType;
+    private readonly prefix: string;
+    private connecting: Promise<unknown> | null = null;
 
-    constructor(options?: CacheOptions) {
-        this.client = getRedisClient({
-            url: options?.url,
-            password: options?.password,
+    constructor(options: CacheOptions) {
+        this.client = createClient({ url: options.url });
+        this.client.on("error", (error: unknown) => {
+            logger.error("Redis cache error", { error });
         });
-        this.prefix = options?.prefix || "cache:";
+        this.prefix = options.prefix ?? "cache:";
+    }
+
+    // Connects on first use so importing the cache never opens a socket.
+    private async redis(): Promise<RedisClientType> {
+        if (!this.client.isOpen) {
+            this.connecting ??= this.client.connect().finally(() => {
+                this.connecting = null;
+            });
+            await this.connecting;
+        }
+        return this.client;
     }
 
     private key(key: string): string {
@@ -43,21 +51,20 @@ export class RedisCache {
     }
 
     async set<T>(key: string, value: T, ttlMs?: number): Promise<void> {
+        const client = await this.redis();
         const stringValue = JSON.stringify(value);
-        if (ttlMs) {
-            await this.client.set(this.key(key), stringValue, { PX: ttlMs });
-        } else {
-            await this.client.set(this.key(key), stringValue);
-        }
+        await client.set(this.key(key), stringValue, ttlMs ? { PX: ttlMs } : undefined);
     }
 
     async get<T>(key: string): Promise<T | null> {
-        const data = await this.client.get(this.key(key));
-        return data ? JSON.parse(data) : null;
+        const client = await this.redis();
+        const data = await client.get(this.key(key));
+        return data ? (JSON.parse(data) as T) : null;
     }
 
     async has(key: string): Promise<boolean> {
-        return (await this.client.exists(this.key(key))) === 1;
+        const client = await this.redis();
+        return (await client.exists(this.key(key))) === 1;
     }
 
     async remember<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T> {
@@ -70,13 +77,15 @@ export class RedisCache {
     }
 
     async forget(key: string): Promise<void> {
-        await this.client.del(this.key(key));
+        const client = await this.redis();
+        await client.del(this.key(key));
     }
 
     async flush(): Promise<void> {
-        for await (const keys of this.client.scanIterator({ MATCH: this.key("*"), COUNT: 100 })) {
+        const client = await this.redis();
+        for await (const keys of client.scanIterator({ MATCH: this.key("*"), COUNT: 100 })) {
             if (keys.length > 0) {
-                await this.client.del(keys);
+                await client.del(keys);
             }
         }
     }
@@ -84,34 +93,30 @@ export class RedisCache {
     async disconnect(): Promise<void> {
         if (this.client.isOpen) {
             await this.client.quit();
-            redisClient = null;
         }
     }
 
+    /** Returns a release token when the lock was acquired, otherwise null. */
     async acquireLock(key: string, ttlMs: number): Promise<string | null> {
-        const token = randomUUID?.() ?? randomBytes(16).toString("hex");
-        const ok = await this.client.set(this.lockKey(key), token, {
-            NX: true,
-            PX: ttlMs,
-        });
+        const client = await this.redis();
+        const token = randomUUID();
+        const ok = await client.set(this.lockKey(key), token, { NX: true, PX: ttlMs });
         return ok === "OK" ? token : null;
     }
 
     async releaseLock(key: string, token: string): Promise<boolean> {
-        const lua = `
-          if redis.call("get", KEYS[1]) == ARGV[1] then
-            return redis.call("del", KEYS[1])
-          else
-            return 0
-          end
-        `;
-        const res = await this.client.eval(lua, {
+        const client = await this.redis();
+        const result = await client.eval(RELEASE_LOCK_SCRIPT, {
             keys: [this.lockKey(key)],
             arguments: [token],
         });
-        return Number(res) === 1;
+        return Number(result) === 1;
     }
 
+    /**
+     * Runs `fn` while holding a distributed lock. Throws `LOCKED:<key>` when the lock is
+     * taken and `wait` is false, or `LOCK_TIMEOUT:<key>` when waiting exceeds the timeout.
+     */
     async withLock<T>(
         key: string,
         ttlMs: number,
@@ -121,7 +126,6 @@ export class RedisCache {
         const wait = options?.wait ?? false;
         const waitTimeoutMs = options?.waitTimeoutMs ?? 3000;
         const pollIntervalMs = options?.pollIntervalMs ?? 100;
-
         const start = Date.now();
 
         while (true) {
@@ -130,7 +134,7 @@ export class RedisCache {
                 try {
                     return await fn();
                 } finally {
-                    // best-effort unlock; lock will expire anyway if release fails
+                    // Best-effort unlock; the lock expires anyway if release fails.
                     await this.releaseLock(key, token).catch(() => {});
                 }
             }
@@ -143,48 +147,21 @@ export class RedisCache {
                 throw new Error(`LOCK_TIMEOUT:${key}`);
             }
 
-            await new Promise((r) => setTimeout(r, pollIntervalMs));
+            await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
         }
-    }
-
-    async lock(key: string, durationMs: number): Promise<null | (() => Promise<void>)> {
-        const token = randomUUID?.() ?? randomBytes(16).toString("hex");
-
-        const ok = await this.client.set(this.lockKey(key), token, {
-            NX: true,
-            PX: durationMs,
-        });
-
-        if (ok !== "OK") return null;
-
-        // Safe unlock (only delete if token still matches)
-        const lua = `
-          if redis.call("get", KEYS[1]) == ARGV[1] then
-            return redis.call("del", KEYS[1])
-          else
-            return 0
-          end
-        `;
-
-        return async () => {
-            await this.client.eval(lua, {
-                keys: [this.lockKey(key)],
-                arguments: [token],
-            });
-        };
     }
 }
 
-export const cache = new RedisCache({ url: config.REDIS_URL, password: config.REDIS_PASSWORD });
+export const cache = new RedisCache({ url: config.REDIS_URL });
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-type CacheKeyParams = Record<string, any>;
-
-export function ck(prefix: string, params?: CacheKeyParams, namespace?: string): string {
+/**
+ * Builds a deterministic cache key: `ck("users", { page: 1 }, "v1")` -> `v1:users?page=1`.
+ */
+export function ck(prefix: string, params?: Record<string, unknown>, namespace?: string): string {
     const ns = namespace ? `${namespace}:` : "";
     const paramStr = params
         ? Object.entries(params)
-              .sort()
+              .sort(([a], [b]) => a.localeCompare(b))
               .map(([key, value]) => `${key}=${JSON.stringify(value)}`)
               .join("&")
         : "";

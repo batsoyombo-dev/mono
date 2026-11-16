@@ -1,7 +1,8 @@
 {
     "name": "@mono/utils",
-    "version": "1.0.0",
+    "version": "0.0.0",
     "type": "module",
+    "private": true,
     "main": "./src/index.ts",
     "types": "./src/index.ts",
     "scripts": {
@@ -10,13 +11,11 @@
         "check-types": "tsc --noEmit"
     },
     "dependencies": {
-        "date-fns": "^4.1.0",
-        "numeral": "^2.0.6",
-        "zod": "^4.3.6"
+        "date-fns": "^4.4.0",
+        "zod": "catalog:"
     },
     "devDependencies": {
         "@mono/eslint-config": "*",
-        "@mono/typescript-config": "*",
-        "@types/numeral": "^2.0.5"
+        "@mono/typescript-config": "*"
     }
 }

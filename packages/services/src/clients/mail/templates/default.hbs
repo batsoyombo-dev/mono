@@ -1,7 +1,8 @@
+{{!-- `content` is rendered unescaped: pass only trusted, server-generated HTML. --}}
 <!doctype html>
 <html lang="en">
   <body>
     {{{content}}}
-    <p>{{currentYear}}</p>
+    <p>&copy; {{currentYear}} {{appName}}</p>
   </body>
 </html>

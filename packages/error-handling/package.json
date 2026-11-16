@@ -10,12 +10,11 @@
         "lint:fix": "eslint . --fix",
         "check-types": "tsc --noEmit"
     },
+    "dependencies": {
+        "@mono/logger": "*"
+    },
     "devDependencies": {
         "@mono/eslint-config": "*",
         "@mono/typescript-config": "*"
-    },
-    "dependencies": {
-        "@mono/global-config": "*",
-        "@mono/logger": "*"
     }
 }

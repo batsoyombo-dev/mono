@@ -1,4 +1,4 @@
-/** @type {import("eslint").Linter.Config} */
-import { config } from "@mono/eslint-config/base";
+import { nodeConfig } from "@mono/eslint-config/node";
 
-export default config;
+/** @type {import("eslint").Linter.Config[]} */
+export default nodeConfig;

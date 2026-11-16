@@ -30,6 +30,13 @@ export class UnauthorizedError extends AppError {
     }
 }
 
+/** 403 Forbidden */
+export class ForbiddenError extends AppError {
+    constructor(message = "Forbidden") {
+        super(message, 403, true, "ForbiddenError");
+    }
+}
+
 /** 404 Not Found */
 export class NotFoundError extends AppError {
     constructor(resource = "Resource") {
@@ -55,5 +62,12 @@ export class ValidationError extends AppError {
     constructor(message = "Validation failed", errors: Record<string, any> = {}) {
         super(message, 422, true, "ValidationError");
         this.errors = errors;
+    }
+}
+
+/** 409 Conflict — stale optimistic lock, invalid workflow transition, or a unique-constraint race */
+export class ConflictError extends AppError {
+    constructor(message = "Conflict") {
+        super(message, 409, true, "ConflictError");
     }
 }

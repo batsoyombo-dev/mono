@@ -1,44 +1,58 @@
 import { z } from "zod";
 
+// Empty strings in .env mean "not configured" for optional integrations.
+const optional = <T extends z.ZodType>(schema: T) =>
+    z.preprocess((value) => (value === "" ? undefined : value), schema.optional());
+
+const commaSeparatedUrls = z
+    .string()
+    .transform((value) =>
+        value
+            .split(",")
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+    )
+    .pipe(z.array(z.url()));
+
 const _env = z.object({
-    NODE_ENV: z.enum(["development", "staging", "production"]).default("development"),
-    SERVER_PORT: z
-        .string()
-        .transform((v) => parseInt(v, 10))
-        .refine((v) => !Number.isNaN(v), { message: "PORT must be a number" }),
+    NODE_ENV: z.enum(["development", "test", "staging", "production"]).default("development"),
+    APP_NAME: z.string().min(1).default("Mono"),
+    SERVER_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     BASE_URL: z.url(),
+    CORS_ORIGINS: commaSeparatedUrls.default([]),
+
     DATABASE_URL: z.url(),
-    JWT_SECRET: z.string().min(32),
-    JWT_REFRESH_SECRET: z.string().min(32),
-    CORS_ORIGINS: z.string(),
     REDIS_URL: z.url(),
-    REDIS_PASSWORD: z.string(),
-    AWS_ACCESS_KEY: z.string(),
-    AWS_SECRET_KEY: z.string(),
-    AWS_BUCKET_NAME: z.string(),
-    AWS_REGION: z.string(),
-    AWS_CLOUDFRONT_URL: z.string(),
-    BASE_FILE_URL: z.string(),
-    GOOGLE_CLIENT_ID: z.string(),
-    GOOGLE_CLIENT_SECRET: z.string(),
-    GOOGLE_REDIRECT_URI: z.url(),
-    FACEBOOK_CLIENT_ID: z.string(),
-    FACEBOOK_CLIENT_SECRET: z.string(),
-    FACEBOOK_REDIRECT_URI: z.url(),
-    MAIL_PROVIDER: z.string(),
-    MAIL_HOST: z.string(),
-    MAIL_REGION: z.string(),
+
+    BETTER_AUTH_SECRET: z.string().min(32),
+
+    MAIL_HOST: z.string().min(1),
     MAIL_PORT: z.coerce.number().int().min(1).max(65535),
-    MAIL_USERNAME: z.string(),
-    MAIL_PASSWORD: z.string(),
+    MAIL_USERNAME: optional(z.string()),
+    MAIL_PASSWORD: optional(z.string()),
     MAIL_ENCRYPTION: z
         .enum(["true", "false", "1", "0", "tls", "ssl", "starttls", "none"])
         .default("true")
         .transform((value) => ["true", "1", "tls", "ssl", "starttls"].includes(value)),
-    MAIL_FROM_NAME: z.string(),
-    MAIL_FROM_ADDRESS: z.string(),
-    WEB_BASE_URL: z.string(),
+    MAIL_FROM_NAME: z.string().min(1),
+    MAIL_FROM_ADDRESS: z.email(),
+
+    GOOGLE_CLIENT_ID: optional(z.string()),
+    GOOGLE_CLIENT_SECRET: optional(z.string()),
+
+    AWS_ACCESS_KEY: optional(z.string()),
+    AWS_SECRET_KEY: optional(z.string()),
+    AWS_BUCKET_NAME: optional(z.string()),
+    AWS_REGION: optional(z.string()),
 });
 
-export const config = _env.parse(process.env);
+const parsed = _env.safeParse(process.env);
+
+if (!parsed.success) {
+    // Print every invalid variable at once, before anything else boots.
+    console.error("Invalid environment variables:\n" + z.prettifyError(parsed.error));
+    throw new Error("Invalid environment variables");
+}
+
+export const config = parsed.data;
 export type Config = typeof config;

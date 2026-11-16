@@ -1,11 +1,12 @@
 {
     "name": "mq-worker",
-    "version": "1.0.0",
+    "version": "0.0.0",
     "type": "module",
+    "private": true,
     "scripts": {
-        "dev": "bun run src/index.ts",
-        "start": "bun dist/index.js",
-        "build": "bun build ./src/index.ts --outdir dist --target bun --sourcemap && mkdir -p dist/templates && cp -R ../../packages/services/src/clients/mail/templates/. dist/templates",
+        "dev": "bun --env-file=../../.env --watch src/index.ts --queue default",
+        "start": "bun dist/index.js --queue default",
+        "build": "bun build ./src/index.ts --outdir dist --target bun --sourcemap=linked && mkdir -p dist/templates && cp -R ../../packages/services/src/clients/mail/templates/. dist/templates",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",
         "check-types": "tsc --noEmit"
@@ -15,14 +16,12 @@
         "@mono/global-config": "*",
         "@mono/logger": "*",
         "@mono/services": "*",
-        "@mono/utils": "*",
         "bullmq": "catalog:",
-        "dotenv": "catalog:",
-        "minimist": "^1.2.8"
+        "ioredis": "catalog:",
+        "zod": "catalog:"
     },
     "devDependencies": {
         "@mono/eslint-config": "*",
-        "@mono/typescript-config": "*",
-        "@types/minimist": "^1.2.5"
+        "@mono/typescript-config": "*"
     }
 }

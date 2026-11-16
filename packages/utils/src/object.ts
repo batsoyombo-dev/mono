@@ -1,11 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// packages/utils/src/object.ts
-
 /**
- * Returns a deep clone of a value.
+ * Returns a deep clone of a value (supports Date, Map, Set, and circular references).
  */
 export function deepClone<T>(obj: T): T {
-    return JSON.parse(JSON.stringify(obj));
+    return structuredClone(obj);
 }
 
 /**
@@ -65,6 +63,7 @@ export function get<T>(obj: any, path: string, fallback?: T): T | undefined {
  */
 export function set(obj: any, path: string, value: any): void {
     const keys = path.split(".");
+    if (keys.some((key) => ["__proto__", "constructor", "prototype"].includes(key))) return;
     let current = obj;
     for (let i = 0; i < keys.length - 1; i++) {
         const key = keys[i] as string;

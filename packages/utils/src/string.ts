@@ -86,10 +86,3 @@ export function slugify(str: string): string {
         .replace(/[^a-z0-9]+/g, "-") // replace non-alphanumeric with hyphens
         .replace(/^-+|-+$/g, ""); // trim leading/trailing hyphens
 }
-
-/**
- * Humanize name
- */
-export function humanizeName(firstname: string, lastname: string) {
-    return `${lastname} ${firstname}`;
-}

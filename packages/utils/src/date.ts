@@ -23,30 +23,29 @@ import {
     subMonths,
     subYears,
 } from "date-fns";
-import { mn } from "date-fns/locale";
 
 export const formatPatterns = {
-    dateTime: "yyyy MMM dd HH:mm", // 17 Apr 2022 12:00 am
-    date: "yyyy MMM dd", // 17 Apr 2022
-    time: "HH:mm", // 12:00 am
+    dateTime: "yyyy MMM dd HH:mm", // 2022 Apr 17 13:00
+    date: "yyyy MMM dd", // 2022 Apr 17
+    time: "HH:mm", // 13:00
     split: {
-        dateTime: "yyyy/MM/dd HH:mm", // 17/04/2022 12:00 am
-        date: "yyyy/MM/dd", // 17/04/2022
+        dateTime: "yyyy/MM/dd HH:mm", // 2022/04/17 13:00
+        date: "yyyy/MM/dd", // 2022/04/17
     },
     paramCase: {
-        dateTime: "yyyy-MM-dd HH:mm", // 17-04-2022 12:00 am
-        date: "yyyy-MM-dd", // 17-04-2022
+        dateTime: "yyyy-MM-dd HH:mm", // 2022-04-17 13:00
+        date: "yyyy-MM-dd", // 2022-04-17
     },
 };
 
 /**
  * Formats a Date or ISO‐string into a given pattern.
  * @param date Date object or ISO string.
- * @param pattern date-fns format string (default ISO with timezone).
+ * @param pattern date-fns format string (default yyyy-MM-dd).
  */
 export function formatDate(date: Date | string, pattern = "yyyy-MM-dd"): string {
     const d = typeof date === "string" ? parseISO(date) : date;
-    return format(d, pattern, { locale: mn });
+    return format(d, pattern);
 }
 
 /**
@@ -55,25 +54,23 @@ export function formatDate(date: Date | string, pattern = "yyyy-MM-dd"): string 
  */
 export function formatDateTime(date: Date | string): string {
     const d = typeof date === "string" ? parseISO(date) : date;
-    return format(d, "yyyy-MM-dd HH:mm:ss", { locale: mn });
+    return format(d, "yyyy-MM-dd HH:mm:ss");
 }
 
 /**
- * Formats a date in a human-readable format, e.g. 'June 13, 2025'.
+ * Formats a date and time in a human-readable format, e.g. '2025 Jun 13 8:00 AM'.
  */
 export function formatHumanDateTime(date: Date | string): string {
     const d = typeof date === "string" ? parseISO(date) : date;
-    // 'PPP' => 'June 13, 2025'
-    return format(d, "yyyy MMM dd p", { locale: mn });
+    return format(d, "yyyy MMM dd p");
 }
 
 /**
- * Formats a date and time in a human-readable format, e.g. 'June 13, 2025 8:00 AM'.
+ * Formats a date and time in a long human-readable format, e.g. 'June 13th, 2025 8:00 AM'.
  */
-export function formatHumanDateTimeTimeDetailed(date: Date | string): string {
+export function formatHumanDateTimeDetailed(date: Date | string): string {
     const d = typeof date === "string" ? parseISO(date) : date;
-    // 'PPP p' => 'June 13, 2025 8:00 AM'
-    return format(d, "PPP p", { locale: mn });
+    return format(d, "PPP p");
 }
 
 /**
