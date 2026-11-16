@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { config } from "@mono/global-config";
 import { logger } from "@mono/logger";
-import { createClient, type RedisClientType } from "redis";
+import { Redis } from "ioredis";
 
 type CacheOptions = {
     url: string;
@@ -19,27 +19,16 @@ const RELEASE_LOCK_SCRIPT = `
 `;
 
 export class RedisCache {
-    private readonly client: RedisClientType;
+    private readonly client: Redis;
     private readonly prefix: string;
-    private connecting: Promise<unknown> | null = null;
 
     constructor(options: CacheOptions) {
-        this.client = createClient({ url: options.url });
+        // lazyConnect: importing the cache never opens a socket; the first command connects.
+        this.client = new Redis(options.url, { lazyConnect: true });
         this.client.on("error", (error: unknown) => {
             logger.error("Redis cache error", { error });
         });
         this.prefix = options.prefix ?? "cache:";
-    }
-
-    // Connects on first use so importing the cache never opens a socket.
-    private async redis(): Promise<RedisClientType> {
-        if (!this.client.isOpen) {
-            this.connecting ??= this.client.connect().finally(() => {
-                this.connecting = null;
-            });
-            await this.connecting;
-        }
-        return this.client;
     }
 
     private key(key: string): string {
@@ -51,20 +40,21 @@ export class RedisCache {
     }
 
     async set<T>(key: string, value: T, ttlMs?: number): Promise<void> {
-        const client = await this.redis();
         const stringValue = JSON.stringify(value);
-        await client.set(this.key(key), stringValue, ttlMs ? { PX: ttlMs } : undefined);
+        if (ttlMs) {
+            await this.client.set(this.key(key), stringValue, "PX", ttlMs);
+        } else {
+            await this.client.set(this.key(key), stringValue);
+        }
     }
 
     async get<T>(key: string): Promise<T | null> {
-        const client = await this.redis();
-        const data = await client.get(this.key(key));
+        const data = await this.client.get(this.key(key));
         return data ? (JSON.parse(data) as T) : null;
     }
 
     async has(key: string): Promise<boolean> {
-        const client = await this.redis();
-        return (await client.exists(this.key(key))) === 1;
+        return (await this.client.exists(this.key(key))) === 1;
     }
 
     async remember<T>(key: string, ttlMs: number, fetcher: () => Promise<T>): Promise<T> {
@@ -77,39 +67,35 @@ export class RedisCache {
     }
 
     async forget(key: string): Promise<void> {
-        const client = await this.redis();
-        await client.del(this.key(key));
+        await this.client.del(this.key(key));
     }
 
     async flush(): Promise<void> {
-        const client = await this.redis();
-        for await (const keys of client.scanIterator({ MATCH: this.key("*"), COUNT: 100 })) {
+        const stream = this.client.scanStream({ match: this.key("*"), count: 100 });
+        for await (const keys of stream as AsyncIterable<string[]>) {
             if (keys.length > 0) {
-                await client.del(keys);
+                await this.client.del(...keys);
             }
         }
     }
 
     async disconnect(): Promise<void> {
-        if (this.client.isOpen) {
+        if (this.client.status === "ready") {
             await this.client.quit();
+        } else {
+            this.client.disconnect();
         }
     }
 
     /** Returns a release token when the lock was acquired, otherwise null. */
     async acquireLock(key: string, ttlMs: number): Promise<string | null> {
-        const client = await this.redis();
         const token = randomUUID();
-        const ok = await client.set(this.lockKey(key), token, { NX: true, PX: ttlMs });
+        const ok = await this.client.set(this.lockKey(key), token, "PX", ttlMs, "NX");
         return ok === "OK" ? token : null;
     }
 
     async releaseLock(key: string, token: string): Promise<boolean> {
-        const client = await this.redis();
-        const result = await client.eval(RELEASE_LOCK_SCRIPT, {
-            keys: [this.lockKey(key)],
-            arguments: [token],
-        });
+        const result = await this.client.eval(RELEASE_LOCK_SCRIPT, 1, this.lockKey(key), token);
         return Number(result) === 1;
     }
 

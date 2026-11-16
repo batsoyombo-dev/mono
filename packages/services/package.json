@@ -16,18 +16,18 @@
         "check-types": "tsc --noEmit"
     },
     "dependencies": {
-        "@aws-sdk/client-s3": "^3.1146.0",
-        "@better-auth/prisma-adapter": "^1.7.7",
+        "@aws-sdk/client-s3": "^3.1169.0",
+        "@better-auth/prisma-adapter": "^1.7.25",
         "@mono/database": "*",
         "@mono/error-handling": "*",
         "@mono/global-config": "*",
         "@mono/logger": "*",
         "@mono/utils": "*",
-        "better-auth": "^1.7.7",
+        "better-auth": "^1.7.25",
         "bullmq": "catalog:",
-        "handlebars": "^4.7.9",
+        "handlebars": "^4.7.10",
         "ioredis": "catalog:",
-        "nodemailer": "^10.0.14",
+        "nodemailer": "^10.6.0",
         "zod": "catalog:"
     },
     "devDependencies": {

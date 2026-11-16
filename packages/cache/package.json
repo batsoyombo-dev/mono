@@ -13,7 +13,7 @@
     "dependencies": {
         "@mono/global-config": "*",
         "@mono/logger": "*",
-        "redis": "^6.3.0"
+        "ioredis": "catalog:"
     },
     "devDependencies": {
         "@mono/eslint-config": "*",

@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import { logLevel, nodeEnv } from "./runtime";
+
 // Empty strings in .env mean "not configured" for optional integrations.
 const optional = <T extends z.ZodType>(schema: T) =>
     z.preprocess((value) => (value === "" ? undefined : value), schema.optional());
@@ -15,7 +17,8 @@ const commaSeparatedUrls = z
     .pipe(z.array(z.url()));
 
 const _env = z.object({
-    NODE_ENV: z.enum(["development", "test", "staging", "production"]).default("development"),
+    NODE_ENV: nodeEnv,
+    LOG_LEVEL: logLevel,
     APP_NAME: z.string().min(1).default("Mono"),
     SERVER_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
     BASE_URL: z.url(),
@@ -56,3 +59,5 @@ if (!parsed.success) {
 
 export const config = parsed.data;
 export type Config = typeof config;
+
+export { runtimeConfig, type RuntimeConfig } from "./runtime";

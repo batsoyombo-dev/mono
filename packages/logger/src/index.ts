@@ -1,8 +1,9 @@
+import { runtimeConfig } from "@mono/global-config/runtime";
 import { createLogger, format, transports } from "winston";
 
 const { combine, timestamp, printf, colorize, errors, json } = format;
 
-const isProduction = process.env.NODE_ENV === "production";
+const isProduction = runtimeConfig.NODE_ENV === "production";
 
 function serializeMetaValue(value: unknown): unknown {
     if (value instanceof Error) {
@@ -27,7 +28,7 @@ const prettyFormat = printf(({ level, message, timestamp, stack, ...meta }) => {
 });
 
 const logger = createLogger({
-    level: process.env.LOG_LEVEL || "info",
+    level: runtimeConfig.LOG_LEVEL,
     // Production logs are JSON so log collectors can index metadata fields.
     format: isProduction
         ? combine(errors({ stack: true }), serializeErrors(), timestamp(), json())

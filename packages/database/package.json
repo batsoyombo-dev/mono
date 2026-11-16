@@ -15,14 +15,15 @@
         "db:studio": "bun --env-file=../../.env prisma studio"
     },
     "dependencies": {
-        "@prisma/adapter-pg": "^7.10.0",
-        "@prisma/client": "^7.10.0",
+        "@mono/global-config": "*",
+        "@prisma/adapter-pg": "^7.10.1",
+        "@prisma/client": "^7.10.1",
         "pg": "^8.23.1"
     },
     "devDependencies": {
         "@mono/eslint-config": "*",
         "@mono/typescript-config": "*",
         "@types/pg": "^8.23.1",
-        "prisma": "^7.10.0"
+        "prisma": "^7.10.1"
     }
 }
