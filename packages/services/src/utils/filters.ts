@@ -393,7 +393,7 @@ function parseListPagination(
  * Turns a list request (`listSchema` from @mono/utils) into Prisma `where`, `orderBy`, `skip` and
  * `take` inputs, rejecting fields outside the allowlists with a 422. `sorts` always ends with a
  * unique tiebreaker (`id desc` by default), so offset pages never repeat or skip rows when sort
- * values tie. See the notes module for usage.
+ * values tie. See "Feature module" in AGENTS.md for usage.
  */
 export function parseListRouteInput(input: ListRouteInput, options: ListFieldOptions) {
     const limits = resolveLimits(options);

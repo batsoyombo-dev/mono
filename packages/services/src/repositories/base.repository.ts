@@ -18,10 +18,10 @@ type BaseRepositoryOptions = {
  * Soft delete (`{ softDelete: true }`): the methods here add `deletedAt: null` to the top-level
  * `where` of reads, counts, aggregates, updates and deletes, and deletes set `deletedAt` instead
  * of removing the row. Limits:
- * - Relations are **not** filtered. `include: { notes: true }`, `select: { notes: ... }` and
- *   relation filters such as `where: { notes: { some: ... } }` still see soft-deleted related
+ * - Relations are **not** filtered. `include: { posts: true }`, `select: { posts: ... }` and
+ *   relation filters such as `where: { posts: { some: ... } }` still see soft-deleted related
  *   rows. Add `where: { deletedAt: null }` inside the relation yourself
- *   (`include: { notes: { where: { deletedAt: null } } }`, `notes: { some: { deletedAt: null, ... } }`).
+ *   (`include: { posts: { where: { deletedAt: null } } }`, `posts: { some: { deletedAt: null, ... } }`).
  * - `upsert` is passed through unchanged: a soft-deleted row that matches `where` is updated and
  *   stays deleted. `upsertById` treats a soft-deleted row as missing instead (see there).
  * - `create`, `createMany` and `createManyAndReturn` are unaffected; raw queries

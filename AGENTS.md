@@ -4,7 +4,7 @@ Bun + Turborepo backend: an Elysia HTTP API (`apps/api`) with Better Auth, a Bul
 
 Reference implementations to copy:
 
-- **CRUD resource with ownership, lists and soft delete:** `packages/services/src/modules/notes`, `packages/services/src/repositories/note.repository.ts`, `apps/api/src/controllers/note.controller.ts`, tests in `packages/services/tests/note-service.test.ts`, `packages/services/tests/integration/note.integration.test.ts` and `apps/api/tests/notes.test.ts`. Notes is an example resource: copy its shape, and delete it (model, migration, module, controller, tests) once the project has real resources.
+- **CRUD resource with ownership, lists and soft delete:** the "Feature module" recipe below, which includes a sketch of the service and controller. Once the project has a real resource, list it here.
 - **Smallest module:** `packages/services/src/modules/user` with `apps/api/src/controllers/user.controller.ts`.
 
 ## Rules
@@ -20,7 +20,7 @@ Reference implementations to copy:
 9. Every schema change ships with a migration (`bun run db:migrate -- --name <name>`). Never edit an applied migration. CI runs `bun run db:check`, which replays the migrations into a throwaway shadow database (created next to `DATABASE_URL`, or `SHADOW_DATABASE_URL`) and fails when the result differs from `schema.prisma`.
 10. List endpoints go through `parseListRouteInput(input, { filterFields, sortFields })` from `@mono/services/filters` with explicit allowlists (both required). `filterFields` maps each field to its type (`{ title: "text", pinned: "boolean", createdAt: "date" }`) and `sortFields` lists sortable fields. Filter ids are Prisma paths, so list only fields that are safe to expose; an open list would let callers query any column or relation. The server's type wins: a mismatched `type`, an operator the type doesn't support, or `blank` on a field not in `nullableFields` is a 422. Requests are bounded by `LIST_LIMITS` (20 filters, 100 `in` values, 200-character search, page ≤ 10000, pageSize ≤ 100; override with `limits`). Number values must be plain decimals, and date values ISO 8601 (with a zone when a time is given) or epoch milliseconds. Results always end with an `id desc` tiebreaker so pages are stable (`tiebreaker` for a model without `id`); set the default order with `defaultSorts`.
 11. Never leave a promise floating: `await` it, return it, or mark a deliberate fire-and-forget with `void`. ESLint enforces this (`no-floating-promises`, `no-misused-promises`), because a rejection nobody handles is logged as a crash (`@mono/error-handling`): an `uncaughtException` always shuts the process down with exit 1, and an `unhandledRejection` does when the error is not a known `AppError` (anything that maps to 500). Shutdown runs the registered handlers first, within `listenToErrorEvents({ shutdownTimeoutMs })` (10s default); a failed handler, a timeout or a crash during shutdown exits 1, and a second SIGINT/SIGTERM exits 1 at once.
-12. Import `@mono/services` by area, never from the package root (there is none): `@mono/services/<module>` (for example `/notes`, `/user`, `/auth`, `/queue`), `@mono/services/queues` (and `/queues/schema`: job schemas, names, schedules and `prepareJobData`; pure, safe in unit tests), `/mail`, `/storage`, `/filters`, `/repositories`, `/lifecycle`. The API request layer may only import `@mono/services/<module>/schema` and `/types`.
+12. Import `@mono/services` by area, never from the package root (there is none): `@mono/services/<module>` (for example `/user`, `/auth`, `/queue`), `@mono/services/queues` (and `/queues/schema`: job schemas, names, schedules and `prepareJobData`; pure, safe in unit tests), `/mail`, `/storage`, `/filters`, `/repositories`, `/lifecycle`. The API request layer may only import `@mono/services/<module>/schema` and `/types`.
 
 ## Done means
 
@@ -91,7 +91,7 @@ Importing `@mono/env` never throws: each `env.<group>` is validated on first rea
 ### Feature module (CRUD resource)
 
 1. `packages/database/prisma/schema.prisma`: add the model, then `bun run db:migrate -- --name <name>` (needs `bun run infra:up`).
-2. `packages/services/src/repositories/<name>.repository.ts`: `class XRepository extends BaseRepository<PrismaClient["x"]>` whose constructor takes a `PrismaClient`, plus `export const xRepository = new XRepository(prisma)`. Re-export it from `repositories/index.ts`. Pass `{ softDelete: true }` when the model has a nullable `deletedAt`: reads, counts, `aggregate`/`groupBy`, updates and deletes then skip deleted rows (updating or deleting one throws P2025, a 404). Relations are not filtered: an `include`/`select` of a relation and relation filters (`where: { notes: { some } }`) still see deleted rows, so add `deletedAt: null` inside the relation yourself. `upsert` is not soft-delete aware; `upsertById` treats a deleted row as missing and creates instead.
+2. `packages/services/src/repositories/<name>.repository.ts`: `class XRepository extends BaseRepository<PrismaClient["x"]>` whose constructor takes a `PrismaClient`, plus `export const xRepository = new XRepository(prisma)`. Re-export it from `repositories/index.ts`. Pass `{ softDelete: true }` when the model has a nullable `deletedAt`: reads, counts, `aggregate`/`groupBy`, updates and deletes then skip deleted rows (updating or deleting one throws P2025, a 404). Relations are not filtered: an `include`/`select` of a relation and relation filters (`where: { posts: { some } }`) still see deleted rows, so add `deletedAt: null` inside the relation yourself. `upsert` is not soft-delete aware; `upsertById` treats a deleted row as missing and creates instead.
 3. `packages/services/src/modules/<name>/`:
     - `schema.ts`: zod input schemas.
     - `types.ts`: `z.infer` payloads, `*Input` types (payload + `actorUserId`), response types, and a `<Name>Operations` type listing the service functions.
@@ -101,6 +101,82 @@ Importing `@mono/env` never throws: each `env.<group>` is validated on first rea
 4. `apps/api/src/controllers/<name>.controller.ts`: `create<Name>Controller({ auth, <name> })` returns an `Elysia` instance. Resolve the actor with `.derive(... getAuthorizedSessionUserId(auth, request))` so unauthenticated calls get 401 before validation, and validate with `{ body, params, query }` schemas. Wrap results in `success(...)` (`success(data, 201)` for creates).
 5. Wire it: add the dependency to `ApiDependencies` and `createApi` in `apps/api/src/controllers/index.ts`, pass the real service in `apps/api/src/index.ts`, and add a fake to `createTestApp` in `apps/api/tests/helpers.ts`. Every dependency is required, so a missing wire is a type error.
 6. Test the service in `packages/services/tests` with `create<Name>Service({ <repo>: fakeRepo })` imported from `service.ts`, the routes in `apps/api/tests` with `createTestApp({ <name>: fakeService })` and `app.handle(new Request(...))`, and the repository plus service against PostgreSQL in `packages/services/tests/integration/<name>.integration.test.ts`.
+
+Sketch of the service and controller for a `posts` resource owned by a user:
+
+```ts
+// packages/services/src/modules/posts/service.ts
+const postSelect = { id: true, userId: true, title: true, createdAt: true } as const;
+// Callers may filter and sort by these only; never list private columns.
+const listFields = {
+    filterFields: { title: "text", createdAt: "date" },
+    sortFields: ["title", "createdAt"],
+    defaultSorts: [{ createdAt: "desc" }],
+} satisfies ListFieldOptions;
+
+export type PostServiceDeps = {
+    posts: Pick<PostRepository, "create" | "getManyWithPage" | "getOneById" | "update" | "delete">;
+};
+
+export function createPostService({ posts }: PostServiceDeps): PostOperations {
+    // Ownership lives here: 404 when missing (or soft-deleted), 403 when someone else's.
+    async function getOwnedPost(actorUserId: number, postId: number) {
+        const post = await posts.getOneById(postIdSchema.parse(postId), { select: postSelect });
+        if (!post) throw new NotFoundError("Post");
+        if (post.userId !== actorUserId) throw new ForbiddenError("You cannot access this post");
+        return post;
+    }
+
+    return {
+        createPost: ({ actorUserId, ...payload }) =>
+            posts.create({
+                data: { ...createPostSchema.parse(payload), userId: actorUserId },
+                select: postSelect,
+            }),
+        listPosts: ({ actorUserId, ...payload }) => {
+            const { filters, pagination, sorts } = parseListRouteInput(
+                listPostsSchema.parse(payload),
+                listFields
+            );
+            return posts.getManyWithPage(pagination, {
+                where: { AND: [{ userId: actorUserId }, filters] },
+                orderBy: sorts,
+                select: postSelect,
+            });
+        },
+        updatePost: async ({ actorUserId, postId, ...payload }) => {
+            const post = await getOwnedPost(actorUserId, postId);
+            const data = updatePostSchema.parse(payload);
+            return posts.update({ where: { id: post.id }, data, select: postSelect });
+        },
+        // getPost and deletePost follow the same pattern.
+    };
+}
+
+// apps/api/src/controllers/post.controller.ts
+export function createPostController({ auth, posts }: PostControllerOptions) {
+    return (
+        new Elysia({ prefix: "/posts", name: "Posts", detail: { tags: ["posts"] } })
+            // After body parsing, before validation: unauthenticated calls get 401, not 422.
+            .derive(async ({ request }) => ({
+                actorUserId: await getAuthorizedSessionUserId(auth, request),
+            }))
+            .post(
+                "/",
+                async ({ actorUserId, body }) =>
+                    success({ post: await posts.createPost({ ...body, actorUserId }) }, 201),
+                { body: createPostSchema }
+            )
+            // POST because a data table sends pagination, filters and sorts as a JSON body.
+            .post(
+                "/search",
+                async ({ actorUserId, body }) =>
+                    success(await posts.listPosts({ ...body, actorUserId })),
+                { body: listPostsSchema }
+            )
+    );
+}
+```
 
 ### Background job
 

@@ -32,7 +32,7 @@ apps/
 packages/
   services/           business logic: modules, repositories, queues (cron jobs in
                       src/queues/schedules.ts), clients
-                      (imported by area: @mono/services/notes, /queues, /mail, ...)
+                      (imported by area: @mono/services/user, /queues, /mail, ...)
   database/           Prisma schema, migrations, client
   env/                typed env: shared variable groups (env.<group>) + defineEnv for apps
   error-handling/     AppError hierarchy + process/shutdown handling

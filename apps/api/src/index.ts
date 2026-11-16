@@ -7,7 +7,6 @@ import { errorHandler } from "@mono/error-handling";
 import { logger } from "@mono/logger";
 import { auth } from "@mono/services/auth";
 import { closeServices } from "@mono/services/lifecycle";
-import { noteService } from "@mono/services/notes";
 import { queueService } from "@mono/services/queue";
 import { defaultQueue } from "@mono/services/queues";
 import { userService } from "@mono/services/user";
@@ -26,7 +25,6 @@ const app = createApp({
     allowedOrigins: config.CORS_ORIGINS,
     auth: session,
     users: userService,
-    notes: noteService,
     queues: queueService,
     adminEmails: config.ADMIN_EMAILS,
     readiness: {

@@ -33,7 +33,7 @@ function fakeModel() {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 class TestRepository extends BaseRepository<any> {
     constructor(model: unknown, softDelete: boolean) {
-        super(model, "note", { softDelete });
+        super(model, "user", { softDelete }); // any model name; the delegate is a fake
     }
 }
 
@@ -135,11 +135,11 @@ describe("BaseRepository soft delete", () => {
     test("relation filters and includes are not rewritten", async () => {
         const { repo, calls } = setup();
 
-        await repo.getMany({ where: { user: { notes: { some: {} } } }, include: { user: true } });
+        await repo.getMany({ where: { user: { posts: { some: {} } } }, include: { user: true } });
 
         // Only the top-level where gets deletedAt: null; relations are the caller's job.
         expect(calls[0]?.args).toEqual({
-            where: { user: { notes: { some: {} } }, deletedAt: null },
+            where: { user: { posts: { some: {} } }, deletedAt: null },
             include: { user: true },
         });
     });

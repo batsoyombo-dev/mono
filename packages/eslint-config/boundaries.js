@@ -23,7 +23,7 @@ const ALLOWED = {
     database: ["env"],
     cache: ["env", "logger"],
     services: ["cache", "database", "env", "error-handling", "logger", "utils"],
-    // @mono/services has no root entry: import a module or area, e.g. @mono/services/notes.
+    // @mono/services has no root entry: import a module or area, e.g. @mono/services/user.
     "mq-worker": [
         "cache",
         "env",

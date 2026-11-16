@@ -1,12 +1,10 @@
 import { Elysia } from "elysia";
 
-import type { NoteOperations } from "@mono/services/notes/types";
 import type { QueueOperations } from "@mono/services/queue/types";
 import type { UserOperations } from "@mono/services/user/types";
 
 import type { AuthHandler } from "./auth-handler";
 import { createAuthController } from "./auth.controller";
-import { createNoteController } from "./note.controller";
 import { createQueueController } from "./queue.controller";
 import { createUserController } from "./user.controller";
 
@@ -18,18 +16,16 @@ import { createUserController } from "./user.controller";
 type ApiDependencies = {
     auth: AuthHandler;
     users: UserOperations;
-    notes: NoteOperations;
     queues: QueueOperations;
     /** Lowercase emails allowed to use admin routes. Empty means no admins. */
     adminEmails: readonly string[];
 };
 
 /** Mounts every versioned route under /api/v1. */
-export function createApi({ auth, users, notes, queues, adminEmails }: ApiDependencies) {
+export function createApi({ auth, users, queues, adminEmails }: ApiDependencies) {
     return new Elysia({ prefix: "/api/v1", name: "Api" })
         .use(createAuthController(auth))
         .use(createUserController({ auth, users }))
-        .use(createNoteController({ auth, notes }))
         .use(createQueueController({ auth, adminEmails, queues }));
 }
 

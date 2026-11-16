@@ -394,7 +394,7 @@ describe("API", () => {
         );
         expect(withDocs.status).toBe(200);
         const spec = (await withDocs.json()) as { paths: Record<string, unknown> };
-        expect(Object.keys(spec.paths)).toContain("/api/v1/notes/");
+        expect(Object.keys(spec.paths)).toContain("/api/v1/users/me");
 
         const withoutDocs = await createTestApp().handle(
             new Request("http://localhost/openapi/json")

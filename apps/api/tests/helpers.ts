@@ -25,7 +25,6 @@ export function createTestApp(overrides: Partial<TestAppOptions> = {}) {
         readiness: {},
         auth: { handler: async () => new Response("auth"), getSession: async () => null },
         users: unimplemented("users"),
-        notes: unimplemented("notes"),
         queues: unimplemented("queues"),
         adminEmails: [],
         ...overrides,
