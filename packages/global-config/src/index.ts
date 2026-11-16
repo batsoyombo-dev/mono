@@ -16,6 +16,16 @@ const commaSeparatedUrls = z
     )
     .pipe(z.array(z.url()));
 
+const commaSeparatedEmails = z
+    .string()
+    .transform((value) =>
+        value
+            .split(",")
+            .map((entry) => entry.trim().toLowerCase())
+            .filter(Boolean)
+    )
+    .pipe(z.array(z.email()));
+
 const _env = z.object({
     NODE_ENV: nodeEnv,
     LOG_LEVEL: logLevel,
@@ -28,6 +38,8 @@ const _env = z.object({
     REDIS_URL: z.url(),
 
     BETTER_AUTH_SECRET: z.string().min(32),
+    /** Verified users with these emails can use the queue admin API and dashboard. */
+    ADMIN_EMAILS: commaSeparatedEmails.default([]),
 
     MAIL_HOST: z.string().min(1),
     MAIL_PORT: z.coerce.number().int().min(1).max(65535),

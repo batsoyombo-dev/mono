@@ -40,6 +40,8 @@ const SCOPED = {
             reason: "Service modules reach the database through repositories (src/repositories).",
         },
     ],
+    // apps/api/src/admin (queue dashboard) is deliberately outside this scope: it needs the real
+    // queues and is mounted through createApp({ plugins }), so API tests never load it.
     api: [
         {
             files: [

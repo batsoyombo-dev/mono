@@ -69,7 +69,10 @@ describe("API", () => {
 
     test("serves the profile of the authenticated user", async () => {
         const calls: unknown[] = [];
-        const app = createTestApp({ session: { user: { id: "42" } }, users: fakeUsers(calls) });
+        const app = createTestApp({
+            session: { user: { id: "42", email: "ada@example.com", emailVerified: true } },
+            users: fakeUsers(calls),
+        });
 
         const response = await app.handle(new Request("http://localhost/api/v1/users/me"));
 
@@ -96,7 +99,10 @@ describe("API", () => {
 
     test("validates the profile update body", async () => {
         const calls: unknown[] = [];
-        const app = createTestApp({ session: { user: { id: 42 } }, users: fakeUsers(calls) });
+        const app = createTestApp({
+            session: { user: { id: 42, email: "ada@example.com", emailVerified: true } },
+            users: fakeUsers(calls),
+        });
         const patch = (body: unknown) =>
             app.handle(
                 new Request("http://localhost/api/v1/users/me", {
@@ -116,7 +122,10 @@ describe("API", () => {
     });
 
     test("rejects a malformed JSON body as a client error", async () => {
-        const app = createTestApp({ session: { user: { id: 42 } }, users: fakeUsers() });
+        const app = createTestApp({
+            session: { user: { id: 42, email: "ada@example.com", emailVerified: true } },
+            users: fakeUsers(),
+        });
 
         const response = await app.handle(
             new Request("http://localhost/api/v1/users/me", {

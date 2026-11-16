@@ -13,6 +13,9 @@
         "check-types": "tsc --noEmit"
     },
     "dependencies": {
+        "@bull-board/api": "^9.13.1",
+        "@bull-board/elysia": "^9.13.1",
+        "@bull-board/ui": "^9.13.1",
         "@elysia/cors": "^1.4.3",
         "@mono/database": "*",
         "@mono/error-handling": "*",

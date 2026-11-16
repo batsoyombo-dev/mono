@@ -1,4 +1,5 @@
 import { cors } from "@elysia/cors";
+import type { AnyElysia } from "elysia";
 import { Elysia } from "elysia";
 
 import type { ApiDependencies } from "./controllers";
@@ -7,10 +8,12 @@ import { errorResponsePlugin } from "./plugins/error-response.plugin";
 
 type CreateAppOptions = ApiDependencies & {
     allowedOrigins: string[];
+    /** Extra mounted apps that need real infrastructure, such as the queue dashboard. */
+    plugins?: AnyElysia[];
 };
 
-export function createApp({ allowedOrigins, ...dependencies }: CreateAppOptions) {
-    return new Elysia({ name: "App" })
+export function createApp({ allowedOrigins, plugins = [], ...dependencies }: CreateAppOptions) {
+    const app = new Elysia({ name: "App" })
         .use(
             cors({
                 origin: allowedOrigins,
@@ -22,4 +25,8 @@ export function createApp({ allowedOrigins, ...dependencies }: CreateAppOptions)
         .use(errorResponsePlugin)
         .use(health)
         .use(createApi(dependencies));
+
+    for (const plugin of plugins) app.use(plugin);
+
+    return app;
 }

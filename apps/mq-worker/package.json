@@ -6,6 +6,7 @@
     "scripts": {
         "dev": "bun --env-file=../../.env --watch src/index.ts --queue default",
         "start": "bun dist/index.js --queue default",
+        "queue": "bun --env-file=../../.env src/cli.ts",
         "build": "bun build ./src/index.ts --outdir dist --target bun --sourcemap=linked && mkdir -p dist/templates && cp -R ../../packages/services/src/clients/mail/templates/. dist/templates",
         "lint": "eslint .",
         "lint:fix": "eslint . --fix",

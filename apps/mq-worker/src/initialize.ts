@@ -1,19 +1,11 @@
-import type { z } from "zod";
-
 import type { JobNames } from "@mono/services";
-import { healthSchema, mailSchema } from "@mono/services";
 
 import { HealthJob, MailJob } from "./jobs";
 import type { JobDef } from "./jobs/job.def";
 
-// Every job name declared in @mono/services queues must have a handler here.
+// Every job name in the @mono/services queue registry must have a handler here (type-checked).
+// Payload schemas live in @mono/services (queueJobSchemas) and are checked before `handle` runs.
 export const jobMap = {
-    health: {
-        schema: healthSchema,
-        job: HealthJob,
-    },
-    mail: {
-        schema: mailSchema,
-        job: MailJob,
-    },
-} satisfies Record<JobNames, { schema: z.ZodType; job: JobDef<never> }>;
+    health: HealthJob,
+    mail: MailJob,
+} satisfies Record<JobNames, JobDef<never>>;

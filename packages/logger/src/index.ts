@@ -43,5 +43,13 @@ const logger = createLogger({
     exitOnError: false,
 });
 
+/**
+ * Sends every log level to stderr, keeping stdout free for machine-readable output
+ * (for example JSON printed by a CLI).
+ */
+function redirectLogsToStderr(): void {
+    logger.clear().add(new transports.Console({ stderrLevels: Object.keys(logger.levels) }));
+}
+
 export type { Logger } from "winston";
-export { logger };
+export { logger, redirectLogsToStderr };

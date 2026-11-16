@@ -13,7 +13,7 @@ bun run seed                # demo@example.com / password123
 bun run dev                 # api on :3000 + mq-worker
 ```
 
-Outgoing email lands in Mailpit at http://localhost:8025.
+Outgoing email lands in Mailpit at http://localhost:8025. The queue dashboard is at http://localhost:3000/admin/queues (admins only, see AGENTS.md).
 
 Requirements: Bun 1.4+, Docker (or your own PostgreSQL and Redis).
 
@@ -55,6 +55,7 @@ packages/
 | `bun run db:deploy`                         | Apply pending migrations                 |
 | `bun run db:studio`                         | Open Prisma Studio                       |
 | `bun run seed`                              | Run the API seeders                      |
+| `bun run queue help`                        | Inspect and trigger queue jobs (CLI)     |
 | `bun run infra:up` / `bun run infra:down`   | Start or stop local infrastructure       |
 
 Every app reads the single root `.env` (`bun --env-file=../../.env`). In production, set real environment variables instead.

@@ -1,13 +1,9 @@
 import { AppError, errorHandler } from "@mono/error-handling";
 import { config } from "@mono/global-config";
-import { defaultQueue, QueueNameSchema } from "@mono/services";
+import { QueueNameSchema, queues } from "@mono/services";
 
 import { syncSchedules } from "./schedules";
 import { DefaultWorker } from "./worker";
-
-const queues = {
-    default: defaultQueue,
-};
 
 const parseQueueName = (queueName: string) => {
     const result = QueueNameSchema.safeParse(queueName);

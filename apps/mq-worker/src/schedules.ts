@@ -1,37 +1,11 @@
-import type { JobData, QueueJobNames, Queues, TypedQueue } from "@mono/services";
 import { logger } from "@mono/logger";
-
-type Schedule<TQueue extends Queues, TJob extends QueueJobNames<TQueue>> = {
-    /** Stable id; changing it creates a new scheduler and removes the old one. */
-    id: string;
-    /** Cron pattern, evaluated in `timezone` (UTC by default). */
-    pattern: string;
-    timezone?: string;
-    job: { name: TJob; data: JobData<TQueue, TJob> };
-};
-
-type ScheduleMap = {
-    [Q in Queues]: Schedule<Q, QueueJobNames<Q>>[];
-};
-
-/**
- * Cron jobs, enqueued by BullMQ job schedulers. Redis stores one scheduler per id, so every
- * worker instance can register them and each tick still runs exactly once.
- */
-export const schedules: ScheduleMap = {
-    default: [
-        {
-            id: "health-check",
-            pattern: "0 * * * *",
-            job: { name: "health", data: { pong: "scheduled" } },
-        },
-    ],
-};
+import type { JobSchemas, Queues, TypedQueue } from "@mono/services";
+import { schedules } from "@mono/services";
 
 /** Upserts this queue's schedules and removes schedulers that were deleted from code. */
 export async function syncSchedules<TQueue extends Queues>(
     queueName: TQueue,
-    queue: TypedQueue<Record<string, unknown>>
+    queue: TypedQueue<JobSchemas>
 ): Promise<void> {
     const wanted = schedules[queueName];
     const wantedIds = new Set(wanted.map((schedule) => schedule.id));

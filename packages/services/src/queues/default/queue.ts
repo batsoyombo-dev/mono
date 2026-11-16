@@ -1,9 +1,4 @@
 import { TypedQueue } from "../queue.def";
-import type { HealthSchemaType, MailSchemaType } from "./types";
+import { defaultQueueJobSchemas } from "./jobs";
 
-export type DefaultQueueJobs = {
-    health: HealthSchemaType;
-    mail: MailSchemaType;
-};
-
-export const defaultQueue = new TypedQueue<DefaultQueueJobs>("default");
+export const defaultQueue = new TypedQueue("default", defaultQueueJobSchemas);

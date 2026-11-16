@@ -1,6 +1,8 @@
 export type AuthSession = {
     user: {
         id: string | number;
+        email: string;
+        emailVerified: boolean;
     };
 };
 

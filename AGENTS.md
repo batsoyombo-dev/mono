@@ -63,7 +63,7 @@ Source of truth: `packages/eslint-config/boundaries.js`. Arrows point to what a 
 | `api` entry and seeds  | everything above                                                                           |
 | `api` request layer    | `error-handling`, `logger`, `utils`, `services/<module>/schema`, `services/<module>/types` |
 
-The API request layer is `src/app.ts`, `src/controllers`, `src/plugins`, `src/utils` and `tests`. It receives real services and config through `createApp(...)` in `apps/api/src/index.ts`, which is why API tests run without a database or `.env`.
+The API request layer is `src/app.ts`, `src/controllers`, `src/plugins`, `src/utils` and `tests`. Code that needs real infrastructure inside the API, such as the queue dashboard in `src/admin`, lives outside it and is passed to `createApp({ plugins })`. It receives real services and config through `createApp(...)` in `apps/api/src/index.ts`, which is why API tests run without a database or `.env`.
 
 `@mono/global-config` throws on import when the environment is invalid. `@mono/global-config/runtime` (`NODE_ENV`, `LOG_LEVEL`, never throws) exists only for the logger.
 
@@ -84,15 +84,39 @@ The API request layer is `src/app.ts`, `src/controllers`, `src/plugins`, `src/ut
 
 ### Background job
 
-1. Add a zod schema to `packages/services/src/queues/default/schemas.ts` and register its type in `DefaultQueueJobs`.
-2. Add a handler in `apps/mq-worker/src/jobs/` and register it in `apps/mq-worker/src/initialize.ts`. This is type-checked: every job name must have a handler.
-3. Enqueue with `defaultQueue.add("<job>", data)`.
+1. Add a zod schema to `packages/services/src/queues/default/schemas.ts` and register it in `defaultQueueJobSchemas` (`queues/default/jobs.ts`). The payload type is derived from the schema.
+2. Add a handler in `apps/mq-worker/src/jobs/` (`JobDef<Payload>`) and register it in `apps/mq-worker/src/initialize.ts`. This is type-checked: every job name must have a handler. Use `job.log(...)` for lines that should appear in the dashboard's Logs tab.
+3. Enqueue with `defaultQueue.add("<job>", data)`. `add` validates the payload and throws `ValidationError` before anything reaches Redis; the worker re-validates and fails bad payloads immediately with no retries (`UnrecoverableError`).
 
-New queue: add its name to `QueueNameSchema`, create a `TypedQueue`, add it to `QueueMap`, the worker's `queues` map and `schedules`. Each worker process runs one queue (`--queue <name>`).
+Defaults: 3 attempts with exponential backoff; completed jobs are kept 7 days (max 1000), failed jobs 30 days (max 5000).
+
+New queue: add its name to `QueueNameSchema` (`queues/names.ts`), add its schemas to `queueJobSchemas` and `QueueMap` (`queues/jobs.ts`), create a `TypedQueue`, add it to `queues` (`queues/registry.ts`) and give it an entry in `schedules`. Each worker process runs one queue (`--queue <name>`).
 
 ### Cron job
 
-Add an entry to `apps/mq-worker/src/schedules.ts`. Schedules are BullMQ job schedulers stored in Redis, so several workers never double-fire. Entries removed from the file are removed from Redis on the next worker start.
+Add an entry to `schedules` in `packages/services/src/queues/schedules.ts`. Schedules are BullMQ job schedulers stored in Redis, synced by the worker on start, so several workers never double-fire. Entries removed from the file are removed from Redis on the next worker start. Run one immediately with `bun run queue trigger <queue> <id>`.
+
+### Operating queues
+
+Three ways to inspect and act on queues. All three call `queueService` (`packages/services/src/modules/queue`), and every action is audit-logged.
+
+- **CLI** (no auth; needs `.env` and Redis). Prints JSON to stdout, logs to stderr, exit code 1 on failure. `bun run queue help` lists everything.
+
+    ```sh
+    bun run queue stats                                  # counts, paused, schedules + next run
+    bun run queue jobs default --status failed           # recent jobs, newest first
+    bun run queue job default <jobId>                    # payload, error, stacktrace, logs
+    bun run queue trigger default health-check           # run a cron schedule now
+    bun run queue add default health '{"pong":"hi"}' --delay 10s --job-id once
+    bun run queue retry default <jobId>                  # also: retry-failed, promote, remove
+    bun run queue pause default                          # also: resume
+    bun run queue clean default --status completed --older-than 1d
+    ```
+
+- **Admin HTTP API** under `/api/v1/admin/queues` (`apps/api/src/controllers/queue.controller.ts`): `GET /`, `GET /:queue/jobs?status=&page=&pageSize=`, `GET /:queue/jobs/:jobId`, `POST /:queue/jobs`, `POST /:queue/schedules/:scheduleId/trigger`, `POST /:queue/jobs/:jobId/retry|promote`, `DELETE /:queue/jobs/:jobId`, `POST /:queue/retry-failed|pause|resume|clean`.
+- **Dashboard** (Bull Board) at `/admin/queues`: recent jobs by status with payload, logs, errors, retry and clean. Mounted in `apps/api/src/admin/queue-dashboard.ts`; the UI itself comes from `@bull-board/ui`, so there is no frontend code to maintain.
+
+The API and dashboard need a Better Auth session cookie for a verified user whose email is in `ADMIN_EMAILS` (comma-separated; `.env.example` makes `demo@example.com` an admin). No session gives 401, a non-admin gives 403. To use the dashboard locally, sign in from the API origin first, for example by running `fetch("/api/v1/auth/sign-in/email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "demo@example.com", password: "password123" }) })` in the browser console on `http://localhost:3000/health`.
 
 ### Cache and locks
 
