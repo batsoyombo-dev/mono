@@ -1,4 +1,5 @@
-import type { MailClient, MailSchemaType } from "@mono/services";
+import type { MailClient } from "@mono/services/mail";
+import type { MailSchemaType } from "@mono/services/queues";
 
 import type { JobDef } from "./job.def";
 

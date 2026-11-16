@@ -6,6 +6,7 @@ import { serializePagination } from "@mono/utils";
 
 import type { Queues } from "../../queues/names";
 import type { ScheduleMap } from "../../queues/schedules";
+import { schedulerKey } from "../../queues/schedules";
 import { cleanJobsSchema, enqueueJobSchema, jobStatusSchema, listJobsQuerySchema } from "./schema";
 import type { JobDetail, JobStatus, JobSummary, QueueOperations } from "./types";
 
@@ -82,8 +83,8 @@ export function createQueueService({ queues, schedules }: QueueServiceDeps): Que
                             pattern: schedule.pattern,
                             timezone: schedule.timezone ?? "UTC",
                             jobName: String(schedule.job.name),
-                            registered: nextRuns.has(schedule.id),
-                            nextRunAt: toIso(nextRuns.get(schedule.id)),
+                            registered: nextRuns.has(schedulerKey(schedule.id)),
+                            nextRunAt: toIso(nextRuns.get(schedulerKey(schedule.id))),
                         })),
                     };
                 })

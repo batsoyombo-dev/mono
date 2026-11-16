@@ -1,5 +1,7 @@
 // Prisma schema: https://pris.ly/d/prisma-schema
 // User, Session, Account and Verification are the Better Auth core tables.
+// Note is the reference CRUD resource (see packages/services/src/modules/notes); delete it when
+// your project has its own.
 
 generator client {
   provider = "prisma-client"
@@ -21,6 +23,7 @@ model User {
 
   accounts Account[]
   sessions Session[]
+  notes    Note[]
 
   @@map("users")
 }
@@ -73,4 +76,20 @@ model Verification {
 
   @@index([identifier, expiresAt])
   @@map("verifications")
+}
+
+model Note {
+  id        Int       @id @default(autoincrement())
+  userId    Int       @map("user_id")
+  title     String    @db.VarChar(200)
+  body      String    @default("") @db.Text
+  pinned    Boolean   @default(false)
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+  deletedAt DateTime? @map("deleted_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, deletedAt, createdAt])
+  @@map("notes")
 }

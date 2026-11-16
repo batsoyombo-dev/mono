@@ -11,8 +11,10 @@ import { parseArgs } from "node:util";
 
 import { AppError, ValidationError } from "@mono/error-handling";
 import { logger, redirectLogsToStderr } from "@mono/logger";
-import type { Queues } from "@mono/services";
-import { QueueNameSchema, queueService, queues } from "@mono/services";
+import { closeServices } from "@mono/services/lifecycle";
+import { queueService } from "@mono/services/queue";
+import type { Queues } from "@mono/services/queues";
+import { QueueNameSchema } from "@mono/services/queues";
 
 redirectLogsToStderr();
 
@@ -168,13 +170,13 @@ try {
         exitCode = 1;
         const output =
             error instanceof ValidationError
-                ? { error: error.message, details: error.errors }
+                ? { error: error.message, issues: error.issues }
                 : { error: error instanceof Error ? error.message : String(error) };
         process.stderr.write(`${JSON.stringify(output, null, 2)}\n`);
         if (!(error instanceof AppError)) logger.error("Queue command failed", { error });
     }
 } finally {
-    await Promise.all(Object.values(queues).map((queue) => queue.close()));
+    await closeServices();
 }
 
 process.exit(exitCode);

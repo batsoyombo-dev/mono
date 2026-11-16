@@ -2,8 +2,8 @@ import { describe, expect, test } from "bun:test";
 
 import type { QueueOperations } from "@mono/services/queue/types";
 
-import { createApp } from "../src/app";
 import type { AuthSession } from "../src/controllers";
+import { createTestApp as createApp } from "./helpers";
 
 const ADMIN = "admin@example.com";
 
@@ -43,7 +43,6 @@ function fakeQueues(calls: Call[] = []): QueueOperations {
 
 function createTestApp(currentSession: AuthSession | null, calls: Call[] = []) {
     return createApp({
-        allowedOrigins: [],
         auth: { handler: async () => new Response("auth"), getSession: async () => currentSession },
         queues: fakeQueues(calls),
         adminEmails: [ADMIN],

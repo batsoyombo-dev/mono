@@ -1,4 +1,5 @@
-import type { JobNames, MailClient } from "@mono/services";
+import type { MailClient } from "@mono/services/mail";
+import type { JobNames } from "@mono/services/queues";
 
 import { createMailJob, HealthJob } from "./jobs";
 import type { JobDef } from "./jobs/job.def";
@@ -8,8 +9,8 @@ export type JobDeps = {
 };
 
 /**
- * Every job name in the @mono/services queue registry must have a handler here (type-checked).
- * Payload schemas live in @mono/services (queueJobSchemas) and are checked before `handle` runs.
+ * Every job name in the @mono/services/queues registry must have a handler here (type-checked).
+ * Payload schemas live in @mono/services/queues (queueJobSchemas) and are checked before `handle` runs.
  * Takes its clients as arguments so tests can pass fakes.
  */
 export function createJobMap({ mail }: JobDeps) {

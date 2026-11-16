@@ -1,41 +1,20 @@
-import type { Job, WorkerOptions } from "bullmq";
-import { UnrecoverableError, Worker } from "bullmq";
+import type { WorkerOptions } from "bullmq";
+import { Worker } from "bullmq";
 
 import { logger } from "@mono/logger";
-import type { JobNames, JobSchemas, Queues } from "@mono/services";
-import { queueJobSchemas } from "@mono/services";
+import type { Queues } from "@mono/services/queues";
+import { queueJobSchemas } from "@mono/services/queues";
 
 import { jobMap } from "./initialize";
+import { createProcessor } from "./processor";
 
 export class DefaultWorker<TQueue extends Queues> {
     private readonly worker: Worker;
 
     constructor(queueName: TQueue, options: WorkerOptions) {
-        const schemas: JobSchemas = queueJobSchemas[queueName];
-
         this.worker = new Worker(
             queueName,
-            async (job: Job) => {
-                const name = job.name as JobNames;
-                const schema = Object.hasOwn(schemas, name) ? schemas[name] : undefined;
-
-                // Retrying cannot fix an unknown job or a bad payload, so fail immediately.
-                if (!schema || !Object.hasOwn(jobMap, name)) {
-                    throw new UnrecoverableError(`Unknown job: ${job.name}`);
-                }
-
-                const validation = await schema.safeParseAsync(job.data);
-                if (!validation.success) {
-                    throw new UnrecoverableError(
-                        `Invalid ${name} job payload: ${validation.error.message}`
-                    );
-                }
-
-                await job.log(`Started attempt ${job.attemptsMade + 1}`);
-                const result = await jobMap[name].handle(job as Job<never>);
-                await job.log("Finished");
-                return result;
-            },
+            createProcessor({ schemas: queueJobSchemas[queueName], handlers: jobMap }),
             options
         );
 
@@ -53,6 +32,11 @@ export class DefaultWorker<TQueue extends Queues> {
         this.worker.on("error", (error) => {
             logger.error(`${queueName}: worker error`, { error });
         });
+    }
+
+    /** True while the worker is connected and taking jobs. */
+    isRunning(): boolean {
+        return this.worker.isRunning();
     }
 
     close(): Promise<void> {

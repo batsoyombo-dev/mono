@@ -1,3 +1,8 @@
+/**
+ * Date helpers built on date-fns. Formatting and start/end-of-day helpers use the process
+ * timezone, so run servers with TZ=UTC (see .env.example) and convert to a user's timezone at
+ * the edge. ISO strings are parsed with parseISO.
+ */
 import type { Duration, StartOfWeekOptions } from "date-fns";
 import {
     add,

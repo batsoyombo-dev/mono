@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { Job } from "bullmq";
 
-import type { MailSchemaType, TemplateEmailOptions } from "@mono/services";
+import type { TemplateEmailOptions } from "@mono/services/mail";
+import type { MailSchemaType } from "@mono/services/queues";
 
 import { createJobMap } from "../src/job-map";
 

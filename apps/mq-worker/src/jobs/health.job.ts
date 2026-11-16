@@ -1,5 +1,5 @@
 import { logger } from "@mono/logger";
-import type { HealthSchemaType } from "@mono/services";
+import type { HealthSchemaType } from "@mono/services/queues";
 
 import type { JobDef } from "./job.def";
 

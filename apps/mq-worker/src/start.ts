@@ -1,5 +1,7 @@
 import { AppError, errorHandler } from "@mono/error-handling";
-import { QueueNameSchema, queues } from "@mono/services";
+import { logger } from "@mono/logger";
+import { closeServices } from "@mono/services/lifecycle";
+import { QueueNameSchema, queues } from "@mono/services/queues";
 
 import { config } from "./config";
 import { syncSchedules } from "./schedules";
@@ -13,18 +15,47 @@ const parseQueueName = (queueName: string) => {
     return result.data;
 };
 
+/** Liveness for orchestrators: 200 while the worker runs and its queue's Redis answers. */
+function serveHealth(port: number, worker: { isRunning(): boolean }, ping: () => Promise<void>) {
+    const server = Bun.serve({
+        port,
+        async fetch(request) {
+            if (new URL(request.url).pathname !== "/health") {
+                return new Response("Not found", { status: 404 });
+            }
+            const redis = await ping().then(
+                () => "ok",
+                (error: unknown) => (error instanceof Error ? error.message : "failed")
+            );
+            const healthy = worker.isRunning() && redis === "ok";
+            return Response.json(
+                { status: healthy ? "ok" : "unhealthy", running: worker.isRunning(), redis },
+                { status: healthy ? 200 : 503 }
+            );
+        },
+    });
+    logger.info(`Worker health on http://localhost:${server.port}/health`);
+    return server;
+}
+
 export async function startQueueService(queueName: string) {
     const parsedQueueName = parseQueueName(queueName);
     const queue = queues[parsedQueueName];
 
     const worker = new DefaultWorker(parsedQueueName, {
         connection: { url: config.REDIS_URL },
-        concurrency: 5,
+        concurrency: config.WORKER_CONCURRENCY,
     });
 
+    const health = config.WORKER_HEALTH_PORT
+        ? serveHealth(config.WORKER_HEALTH_PORT, worker, () => queue.ping())
+        : null;
+
     errorHandler.registerShutdownHandler(async () => {
+        // Stop taking jobs and let active ones finish, then close every connection.
+        await health?.stop();
         await worker.close();
-        await queue.close();
+        await closeServices();
     });
     errorHandler.listenToErrorEvents();
 

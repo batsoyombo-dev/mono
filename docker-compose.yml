@@ -1,4 +1,7 @@
 # Local infrastructure only. Apps run on the host with `bun run dev`.
+# Host ports default to the standard ones. If something else already listens there (a Homebrew
+# PostgreSQL or Redis, another project), set POSTGRES_PORT / REDIS_PORT / MAILPIT_*_PORT in .env
+# and use the same ports in DATABASE_URL, REDIS_URL and MAIL_PORT.
 services:
     postgres:
         image: postgres:18-alpine
@@ -7,7 +10,7 @@ services:
             POSTGRES_PASSWORD: postgres
             POSTGRES_DB: mono
         ports:
-            - "5432:5432"
+            - "${POSTGRES_PORT:-5432}:5432"
         volumes:
             - postgres-data:/var/lib/postgresql
         healthcheck:
@@ -17,8 +20,10 @@ services:
 
     redis:
         image: redis:8-alpine
+        # BullMQ requires noeviction: an evicting Redis silently drops queued jobs.
+        command: ["redis-server", "--appendonly", "yes", "--maxmemory-policy", "noeviction"]
         ports:
-            - "6379:6379"
+            - "${REDIS_PORT:-6379}:6379"
         volumes:
             - redis-data:/data
 
@@ -26,8 +31,8 @@ services:
     mailpit:
         image: axllent/mailpit:v1.33
         ports:
-            - "1025:1025"
-            - "8025:8025"
+            - "${MAILPIT_SMTP_PORT:-1025}:1025"
+            - "${MAILPIT_UI_PORT:-8025}:8025"
 
 volumes:
     postgres-data:

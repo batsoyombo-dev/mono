@@ -20,6 +20,8 @@
         "@bull-board/elysia": "^9.13.1",
         "@bull-board/ui": "^9.13.1",
         "@elysia/cors": "^1.4.3",
+        "@elysia/openapi": "^1.4.17",
+        "@mono/cache": "*",
         "@mono/database": "*",
         "@mono/env": "*",
         "@mono/error-handling": "*",
@@ -44,7 +46,6 @@
         "@mono/logger": "*",
         "@mono/services": "*",
         "bullmq": "catalog:",
-        "ioredis": "catalog:",
         "zod": "catalog:",
       },
       "devDependencies": {
@@ -101,6 +102,7 @@
       "devDependencies": {
         "@mono/eslint-config": "*",
         "@mono/typescript-config": "*",
+        "zod": "catalog:",
       },
     },
     "packages/eslint-config": {
@@ -133,6 +135,7 @@
       "dependencies": {
         "@aws-sdk/client-s3": "^3.1169.0",
         "@better-auth/prisma-adapter": "^1.7.25",
+        "@mono/cache": "*",
         "@mono/database": "*",
         "@mono/env": "*",
         "@mono/error-handling": "*",
@@ -251,6 +254,8 @@
     "@electric-sql/pglite-tools": ["@electric-sql/pglite-tools@0.3.3", "", { "peerDependencies": { "@electric-sql/pglite": "0.4.3" } }, "sha512-AlzLJTRJ8+UFgK8CmxIpyIpJ0+YaFw02IiOSdYrqxwPXdSyeIShz8aa9Tq+tYFXdPwcaMp/Fc80mQZ1dkOQ/wg=="],
 
     "@elysia/cors": ["@elysia/cors@1.4.3", "", { "peerDependencies": { "elysia": ">= 1.4.0" } }, "sha512-GaqNr6ufqAKbw8SVbxYozHdGFQm1AhXWvndWvoK9uyep99Jq+uI5msQfRkzUo1s5QGIjkCkCGX9XGViaDsp+0A=="],
+
+    "@elysia/openapi": ["@elysia/openapi@1.4.17", "", { "peerDependencies": { "@sinclair/typebox": ">= 0.34.0 < 1", "elysia": ">= 1.4.0", "typescript": ">= 5.0.0" } }, "sha512-rmyqxfoQyM6QMsxelt6RMuM8b0I6y33KgGcrm5LKw2xIOVHRFg9EAbxFejZBfyZmVYkY3EazgaPNlEz4HJ3Thg=="],
 
     "@eslint-community/eslint-utils": ["@eslint-community/eslint-utils@4.10.1", "", { "dependencies": { "eslint-visitor-keys": "^3.4.3" }, "peerDependencies": { "eslint": "^6.0.0 || ^7.0.0 || >=8.0.0" } }, "sha512-cuadcxVFE8sDK6iWJbs8Sn0av2Nrh2QSGQhVlBW9AaAHqHwjWsZHT8LJ4hFGPh7ASBV2deFdM7H/DPjulmh8rg=="],
 

@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Base application error, carrying an HTTP status and a trust flag.
  */
@@ -51,17 +50,22 @@ export class InternalServerError extends AppError {
     }
 }
 
+/** One failed field: a dot path (`""` for the whole input) and a human-readable message. */
+export type ValidationIssue = {
+    path: string;
+    message: string;
+};
+
 /**
- * 422 Unprocessable Entity — validation failure
- * Use this to throw when request-body or parameter validation fails.
+ * 422 Unprocessable Entity: input failed validation. Zod errors thrown by `schema.parse` are
+ * converted to this automatically (see `toAppError`), so services can call `parse` directly.
  */
 export class ValidationError extends AppError {
-    /** details about which fields failed and why */
-    public readonly errors: Record<string, any>;
+    public readonly issues: ValidationIssue[];
 
-    constructor(message = "Validation failed", errors: Record<string, any> = {}) {
+    constructor(message = "Validation failed", issues: ValidationIssue[] = []) {
         super(message, 422, true, "ValidationError");
-        this.errors = errors;
+        this.issues = issues;
     }
 }
 

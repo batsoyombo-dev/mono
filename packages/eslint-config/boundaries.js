@@ -3,8 +3,8 @@
  * This map is the source of truth; AGENTS.md "Dependency rules" summarizes it.
  * To allow a new edge, change the map here. Never silence it with eslint-disable.
  *
- * Entries are matched exactly against the import path after `@mono/`, so
- * `"services"` allows the package root but not its subpaths.
+ * Entries are regular expressions matched against the whole import path after `@mono/`, so
+ * `"env"` allows `@mono/env` but not `@mono/env/runtime`.
  */
 const ALLOWED = {
     env: [],
@@ -16,14 +16,23 @@ const ALLOWED = {
     database: ["env"],
     cache: ["env", "logger"],
     services: ["cache", "database", "env", "error-handling", "logger", "utils"],
-    "mq-worker": ["cache", "env", "error-handling", "logger", "services", "utils"],
+    // @mono/services has no root entry: import a module or area, e.g. @mono/services/notes.
+    "mq-worker": [
+        "cache",
+        "env",
+        "error-handling",
+        "logger",
+        "services/[^/]+",
+        "services/[^/]+/(schema|types)",
+        "utils",
+    ],
     api: [
         "cache",
         "database",
         "env",
         "error-handling",
         "logger",
-        "services",
+        "services/[^/]+",
         "services/[^/]+/(schema|types)",
         "utils",
     ],

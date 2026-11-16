@@ -8,7 +8,7 @@ import { getAuthorizedSessionUserId } from "./session-guard";
 import { success } from "../utils/response";
 
 type UserControllerOptions = {
-    auth: Required<Pick<AuthHandler, "getSession">>;
+    auth: Pick<AuthHandler, "getSession">;
     users: UserOperations;
 };
 

@@ -5,9 +5,14 @@ import { parsePagination } from "@mono/utils";
 
 export type { Filter, Filters } from "@mono/utils";
 
+/**
+ * Which fields a list endpoint lets callers filter and sort by. Both lists are required: filter
+ * ids are Prisma paths, so an open list would let callers query any column or relation (for
+ * example `accounts.some.password`). List only fields that are safe to expose.
+ */
 export type ListFieldOptions = {
-    filterFields?: readonly string[];
-    sortFields?: readonly string[];
+    filterFields: readonly string[];
+    sortFields: readonly string[];
     caseSensitiveFields?: readonly string[];
 };
 
@@ -176,12 +181,18 @@ function setNestedValue(object: Record<string, any>, keys: string[], value: any)
     setNestedValue(object[firstKey], restKeys, value);
 }
 
-export function parseFilters(filters: Filters, options?: ListFieldOptions) {
+/** Builds a Prisma `where` from filters. Throws `BadRequestError` for a field not in `filterFields`. */
+export function parseFilters(
+    filters: Filters,
+    options: Pick<ListFieldOptions, "filterFields" | "caseSensitiveFields">
+): Record<string, any> {
     const clauses: Record<string, any>[] = [];
-    const caseSensitiveFields = new Set(options?.caseSensitiveFields ?? []);
+    const allowed = new Set(options.filterFields);
+    const caseSensitiveFields = new Set(options.caseSensitiveFields ?? []);
 
     filters.forEach(({ id, value, operator, type }) => {
         if (!id || (!isBlankOperator(operator) && (value === undefined || value === null))) return;
+        if (!allowed.has(id)) throw new BadRequestError(`Filtering by ${id} is not allowed`);
         const parsed = Array.isArray(value)
             ? parseArrayValue(operator, type, value)
             : parseValue(operator, type, value, {
@@ -194,19 +205,20 @@ export function parseFilters(filters: Filters, options?: ListFieldOptions) {
         clauses.push(clause);
     });
 
-    if (clauses.length === 0) return {};
-    if (clauses.length === 1) return clauses[0];
-    return { AND: clauses };
+    const [only] = clauses;
+    if (clauses.length === 1 && only) return only;
+    return clauses.length === 0 ? {} : { AND: clauses };
 }
 
-export function parseSorts(sorts?: SortRequest, allowedFields?: readonly string[]) {
+/** Builds a Prisma `orderBy`. Throws `BadRequestError` for a field not in `allowedFields`. */
+export function parseSorts(sorts: SortRequest | undefined, allowedFields: readonly string[]) {
     if (!sorts) return [];
-    const allowed = allowedFields ? new Set(allowedFields) : undefined;
+    const allowed = new Set(allowedFields);
     const seen = new Set<string>();
 
     return sorts.flatMap(({ id, desc }) => {
         if (!id || seen.has(id)) return [];
-        if (allowed && !allowed.has(id)) {
+        if (!allowed.has(id)) {
             throw new BadRequestError(`Sorting by ${id} is not allowed`);
         }
         seen.add(id);
@@ -214,23 +226,22 @@ export function parseSorts(sorts?: SortRequest, allowedFields?: readonly string[
     });
 }
 
-export function parseListRouteInput(
-    pagination?: Pick<PaginationRequest, "page" | "pageSize">,
-    filters?: Filters,
-    globalFilter?: string | null,
-    sorts?: SortRequest,
-    options?: ListFieldOptions
-) {
-    const allowedFilters = options?.filterFields ? new Set(options.filterFields) : undefined;
-    const validFilters = (filters ?? []).filter(({ id }) => {
-        if (!allowedFilters || allowedFilters.has(id)) return true;
-        throw new BadRequestError(`Filtering by ${id} is not allowed`);
-    });
+export type ListRouteInput = {
+    pagination?: Pick<PaginationRequest, "page" | "pageSize">;
+    filters?: Filters;
+    globalFilter?: string | null;
+    sorts?: SortRequest;
+};
 
+/**
+ * Turns a list request (`listSchema` from @mono/utils) into Prisma `where`, `orderBy`, `skip` and
+ * `take` inputs, rejecting fields outside the allowlists. See the notes module for usage.
+ */
+export function parseListRouteInput(input: ListRouteInput, options: ListFieldOptions) {
     return {
-        filters: parseFilters(validFilters, options),
-        globalFilter: globalFilter?.trim() || null,
-        pagination: parsePagination(pagination ?? { page: 1, pageSize: 20 }),
-        sorts: parseSorts(sorts ?? [], options?.sortFields),
+        filters: parseFilters(input.filters ?? [], options),
+        globalFilter: input.globalFilter?.trim() || null,
+        pagination: parsePagination(input.pagination ?? { page: 1, pageSize: 20 }),
+        sorts: parseSorts(input.sorts ?? [], options.sortFields),
     };
 }

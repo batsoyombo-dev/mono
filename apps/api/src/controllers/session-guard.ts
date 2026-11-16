@@ -2,7 +2,7 @@ import { ForbiddenError, UnauthorizedError } from "@mono/error-handling";
 
 import type { AuthHandler } from "./auth-handler";
 
-type SessionReader = Required<Pick<AuthHandler, "getSession">>;
+type SessionReader = Pick<AuthHandler, "getSession">;
 
 /** Who may use admin surfaces: verified users whose email is in `adminEmails` (lowercase). */
 export type AdminAccess = {

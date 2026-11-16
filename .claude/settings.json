@@ -13,6 +13,8 @@
             "Bash(bun run build)",
             "Bash(bun run db:generate)",
             "Bash(bun run db:check)",
+            "Bash(bun run db:deploy)",
+            "Bash(bun run infra:up)",
             "Bash(bun test *)",
             "Bash(bun test)",
             "Bash(bun install)",
@@ -30,6 +32,17 @@
             "Bash(git branch -a)",
             "Bash(git branch --list*)"
         ],
-        "deny": ["Read(./.env)"]
+        "deny": [
+            "Read(./.env)",
+            "Read(./.env.local)",
+            "Read(./.env.*.local)",
+            "Read(./.env.development)",
+            "Read(./.env.staging)",
+            "Read(./.env.production)",
+            "Read(./.env.test)",
+            "Bash(cat .env)",
+            "Bash(cat ./.env)",
+            "Bash(cat .env.*.local)"
+        ]
     }
 }

@@ -1,6 +1,6 @@
 import type { z } from "zod";
 
-import { BadRequestError, ValidationError } from "@mono/error-handling";
+import { BadRequestError, toValidationIssues, ValidationError } from "@mono/error-handling";
 
 /** Job name -> zod schema of its payload. One map per queue. */
 export type JobSchemas = Record<string, z.ZodType>;
@@ -18,7 +18,10 @@ export function parseJobData(queueName: string, schemas: JobSchemas, name: strin
 
     const result = schema.safeParse(data);
     if (!result.success) {
-        throw new ValidationError(`Invalid "${name}" job payload`, { issues: result.error.issues });
+        throw new ValidationError(
+            `Invalid "${name}" job payload`,
+            toValidationIssues(result.error.issues)
+        );
     }
     return result.data;
 }

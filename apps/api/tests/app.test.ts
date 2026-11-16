@@ -1,9 +1,14 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, spyOn, test } from "bun:test";
+
+import { z } from "zod";
+
+import { logger } from "@mono/logger";
 
 import type { UserOperations } from "@mono/services/user/types";
 
-import { createApp } from "../src/app";
 import type { AuthSession } from "../src/controllers";
+import type { TestAppOptions } from "./helpers";
+import { createTestApp as createFakedApp } from "./helpers";
 
 const allowedOrigin = "https://app.example.com";
 
@@ -16,14 +21,17 @@ const profile = {
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
 };
 
-function createTestApp(options: { session?: AuthSession | null; users?: UserOperations } = {}) {
-    return createApp({
+function createTestApp(
+    options: { session?: AuthSession | null; users?: UserOperations } & Partial<TestAppOptions> = {}
+) {
+    const { session, ...overrides } = options;
+    return createFakedApp({
         allowedOrigins: [allowedOrigin],
         auth: {
             handler: async () => new Response("auth"),
-            getSession: async () => options.session ?? null,
+            getSession: async () => session ?? null,
         },
-        users: options.users,
+        ...overrides,
     });
 }
 
@@ -118,6 +126,14 @@ describe("API", () => {
         expect(valid.status).toBe(200);
         expect(await valid.json()).toMatchObject({ data: { user: { name: "Grace" } } });
         expect(invalid.status).toBe(422);
+        expect(await invalid.json()).toEqual({
+            success: false,
+            status: 422,
+            error: {
+                message: "Validation failed",
+                issues: [{ path: "name", message: expect.any(String) }],
+            },
+        });
         expect(calls).toEqual([{ name: "Grace", actorUserId: 42 }]);
     });
 
@@ -152,5 +168,137 @@ describe("API", () => {
             status: 404,
             error: { message: "Not found" },
         });
+    });
+
+    test("maps errors thrown inside services to client errors, never a leaked 500", async () => {
+        const session = { user: { id: 42, email: "ada@example.com", emailVerified: true } };
+        const throwing = (error: unknown): UserOperations => ({
+            getProfile: async () => {
+                throw error;
+            },
+            updateProfile: async () => profile,
+        });
+        const get = (error: unknown) =>
+            createTestApp({ session, users: throwing(error) }).handle(
+                new Request("http://localhost/api/v1/users/me")
+            );
+
+        // A service's own schema.parse failing (zod) is a 422, not a 500.
+        const zod = await get(z.object({ name: z.string() }).safeParse({}).error);
+        expect(zod.status).toBe(422);
+        expect(await zod.json()).toMatchObject({
+            error: { message: "Validation failed", issues: [{ path: "name" }] },
+        });
+
+        // Prisma errors keep their meaning.
+        const prisma = (code: string) =>
+            Object.assign(new Error("prisma"), { name: "PrismaClientKnownRequestError", code });
+        expect((await get(prisma("P2002"))).status).toBe(409);
+        expect((await get(prisma("P2025"))).status).toBe(404);
+
+        // Unknown errors are a generic 500 without the internal message (logged, not sent).
+        const errorLog = spyOn(logger, "error").mockImplementation(() => logger);
+        let crash: Response;
+        try {
+            crash = await get(new Error("connection string postgres://secret"));
+            expect(errorLog).toHaveBeenCalledTimes(1);
+        } finally {
+            errorLog.mockRestore();
+        }
+        expect(crash.status).toBe(500);
+        expect(await crash.json()).toEqual({
+            success: false,
+            status: 500,
+            error: { message: "Internal server error" },
+        });
+    });
+
+    test("sends a request id, reusing a valid incoming one", async () => {
+        const app = createTestApp();
+
+        const generated = await app.handle(new Request("http://localhost/health"));
+        expect(generated.headers.get("x-request-id")).toMatch(/^[0-9a-f-]{36}$/);
+
+        const forwarded = await app.handle(
+            new Request("http://localhost/missing", { headers: { "x-request-id": "abc-123" } })
+        );
+        expect(forwarded.status).toBe(404);
+        expect(forwarded.headers.get("x-request-id")).toBe("abc-123");
+    });
+
+    test("logs one line per request with the status actually sent", async () => {
+        const info = spyOn(logger, "info").mockImplementation(() => logger);
+        try {
+            const headers = (id: string) => ({ headers: { "x-request-id": id } });
+            await createTestApp().handle(
+                new Request("http://localhost/api/v1/users/me", headers("log-test-me"))
+            );
+            await createTestApp().handle(
+                new Request("http://localhost/health", headers("log-test-health"))
+            );
+            // onAfterResponse runs after the response is returned.
+            await Bun.sleep(5);
+
+            // winston's overloads type calls as [object]; they are (message, meta) here.
+            const calls = info.mock.calls as unknown as [string, Record<string, unknown>?][];
+            const logged = (id: string) =>
+                calls.filter(
+                    ([message, meta]) => message === "HTTP request" && meta?.requestId === id
+                );
+            expect(logged("log-test-me")).toEqual([
+                [
+                    "HTTP request",
+                    {
+                        requestId: "log-test-me",
+                        method: "GET",
+                        path: "/api/v1/users/me",
+                        status: 401,
+                        durationMs: expect.any(Number),
+                    },
+                ],
+            ]);
+            // Health checks are not logged.
+            expect(logged("log-test-health")).toEqual([]);
+        } finally {
+            info.mockRestore();
+        }
+    });
+
+    test("reports readiness per dependency", async () => {
+        const ready = createTestApp({ readiness: { database: async () => {} } });
+        const notReady = createTestApp({
+            readiness: {
+                database: async () => {},
+                cache: async () => {
+                    throw new Error("connection refused");
+                },
+            },
+        });
+
+        const ok = await ready.handle(new Request("http://localhost/health/ready"));
+        expect(ok.status).toBe(200);
+        expect(await ok.json()).toMatchObject({
+            data: { status: "ready", checks: { database: "ok" } },
+        });
+
+        const failing = await notReady.handle(new Request("http://localhost/health/ready"));
+        expect(failing.status).toBe(503);
+        expect(await failing.json()).toMatchObject({
+            error: { issues: { database: "ok", cache: "connection refused" } },
+        });
+    });
+
+    test("serves OpenAPI docs only when enabled", async () => {
+        const withDocs = await createTestApp({ docs: true }).handle(
+            new Request("http://localhost/openapi/json")
+        );
+        expect(withDocs.status).toBe(200);
+        const spec = (await withDocs.json()) as { paths: Record<string, unknown> };
+        expect(Object.keys(spec.paths)).toContain("/api/v1/notes/");
+
+        const withoutDocs = await createTestApp().handle(
+            new Request("http://localhost/openapi/json")
+        );
+        expect(withoutDocs.status).toBe(404);
     });
 });

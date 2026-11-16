@@ -8,7 +8,7 @@
         "start": "bun dist/index.js",
         "build": "bun build ./src/index.ts --outdir dist --target bun --sourcemap=linked",
         "seed": "bun --env-file=../../.env src/seed.ts",
-        "lint": "eslint .",
+        "lint": "eslint . --max-warnings=0",
         "lint:fix": "eslint . --fix",
         "check-types": "tsc --noEmit"
     },
@@ -17,6 +17,8 @@
         "@bull-board/elysia": "^9.13.1",
         "@bull-board/ui": "^9.13.1",
         "@elysia/cors": "^1.4.3",
+        "@elysia/openapi": "^1.4.17",
+        "@mono/cache": "*",
         "@mono/database": "*",
         "@mono/env": "*",
         "@mono/error-handling": "*",

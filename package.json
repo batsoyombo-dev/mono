@@ -35,7 +35,7 @@
         "lint:fix": "turbo run lint:fix",
         "format": "prettier --check \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
         "format:fix": "prettier --write \"**/*.{ts,tsx,js,json,md,yml,yaml}\"",
-        "test": "bun test --path-ignore-patterns='**/*.integration.test.ts'",
+        "test": "bun --no-env-file test --path-ignore-patterns='**/*.integration.test.ts'",
         "test:integration": "bun test integration.test",
         "verify": "bun run format && bun run check-types && bun run lint && bun run test",
         "clean": "find . -type d \\( -name node_modules -o -name dist -o -name .turbo \\) -prune -exec rm -rf {} +"

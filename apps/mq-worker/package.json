@@ -8,7 +8,7 @@
         "start": "bun dist/index.js --queue default",
         "queue": "bun --env-file=../../.env src/cli.ts",
         "build": "bun build ./src/index.ts --outdir dist --target bun --sourcemap=linked && mkdir -p dist/templates && cp -R ../../packages/services/src/clients/mail/templates/. dist/templates",
-        "lint": "eslint .",
+        "lint": "eslint . --max-warnings=0",
         "lint:fix": "eslint . --fix",
         "check-types": "tsc --noEmit"
     },
@@ -18,7 +18,6 @@
         "@mono/logger": "*",
         "@mono/services": "*",
         "bullmq": "catalog:",
-        "ioredis": "catalog:",
         "zod": "catalog:"
     },
     "devDependencies": {

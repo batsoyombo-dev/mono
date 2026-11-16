@@ -1,17 +1,22 @@
 import { logger } from "@mono/logger";
-import type { JobSchemas, Queues, TypedQueue } from "@mono/services";
-import { schedules } from "@mono/services";
+import type { JobSchemas, Queues, TypedQueue } from "@mono/services/queues";
+import { SCHEDULER_PREFIX, schedulerKey, schedules } from "@mono/services/queues";
 
-/** Upserts this queue's schedules and removes schedulers that were deleted from code. */
+/**
+ * Upserts this queue's schedules and removes the ones deleted from code. Only schedulers whose
+ * id starts with SCHEDULER_PREFIX are managed here; schedulers your code creates at runtime
+ * with other ids are never touched.
+ */
 export async function syncSchedules<TQueue extends Queues>(
     queueName: TQueue,
     queue: TypedQueue<JobSchemas>
 ): Promise<void> {
     const wanted = schedules[queueName];
-    const wantedIds = new Set(wanted.map((schedule) => schedule.id));
+    const wantedKeys = new Set(wanted.map((schedule) => schedulerKey(schedule.id)));
 
     for (const existing of await queue.queue.getJobSchedulers()) {
-        if (existing.key && !wantedIds.has(existing.key)) {
+        const managed = existing.key?.startsWith(SCHEDULER_PREFIX);
+        if (existing.key && managed && !wantedKeys.has(existing.key)) {
             await queue.queue.removeJobScheduler(existing.key);
             logger.info(`Removed job scheduler ${existing.key}`);
         }
@@ -19,7 +24,7 @@ export async function syncSchedules<TQueue extends Queues>(
 
     for (const { id, pattern, timezone, job } of wanted) {
         await queue.queue.upsertJobScheduler(
-            id,
+            schedulerKey(id),
             { pattern, tz: timezone ?? "UTC" },
             { name: String(job.name), data: job.data }
         );

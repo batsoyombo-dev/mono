@@ -1,4 +1,4 @@
-import { mailClient } from "@mono/services";
+import { mailClient } from "@mono/services/mail";
 
 import { createJobMap } from "./job-map";
 

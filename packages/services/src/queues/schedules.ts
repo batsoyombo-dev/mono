@@ -10,6 +10,15 @@ export type Schedule<TQueue extends Queues, TJob extends QueueJobNames<TQueue>> 
     job: { name: TJob; data: JobData<TQueue, TJob> };
 };
 
+/**
+ * Prefix of the BullMQ job schedulers created from `schedules`. The worker's sync only removes
+ * schedulers with this prefix, so schedulers created at runtime (any other id) are left alone.
+ */
+export const SCHEDULER_PREFIX = "cron-";
+
+/** The BullMQ job scheduler id for a schedule in `schedules`. */
+export const schedulerKey = (scheduleId: string) => `${SCHEDULER_PREFIX}${scheduleId}`;
+
 export type ScheduleMap = {
     [Q in Queues]: Schedule<Q, QueueJobNames<Q>>[];
 };

@@ -1,4 +1,7 @@
-type ResponseOptions = Omit<ResponseInit, "status">;
+type ResponseOptions = {
+    headers?: Record<string, string>;
+    statusText?: string;
+};
 
 type ErrorBody<TIssues> = {
     success: false;
@@ -9,8 +12,8 @@ type ErrorBody<TIssues> = {
     };
 };
 
-function json<T>(body: T, init?: ResponseInit): Response {
-    const headers = new Headers(init?.headers);
+function json<T>(body: T, init: ResponseOptions & { status: number }): Response {
+    const headers = new Headers(init.headers);
     headers.set("Content-Type", "application/json; charset=utf-8");
 
     return new Response(

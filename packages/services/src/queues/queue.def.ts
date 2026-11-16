@@ -49,6 +49,11 @@ export class TypedQueue<S extends JobSchemas> {
         return this.queue.add(name, parseJobData(this.name, this.schemas, name, data), opts);
     }
 
+    /** One Redis round-trip; throws when the queue's Redis is unreachable. For readiness checks. */
+    async ping(): Promise<void> {
+        await this.queue.isPaused();
+    }
+
     close() {
         return this.queue.close();
     }

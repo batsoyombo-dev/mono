@@ -217,11 +217,15 @@ export abstract class BaseRepository<T> {
         return this.getModel(transaction).createMany(args);
     }
 
+    /** On soft-delete repositories, deleted rows are not updated (Prisma throws P2025 -> 404). */
     update<A extends Prisma.Args<T, "update">>(
         args: A,
         transaction?: Tx
     ): Promise<Prisma.Result<T, A, "update">> {
-        return this.getModel(transaction).update(args);
+        return this.getModel(transaction).update({
+            ...args,
+            where: this.withSoftDelete(args.where),
+        });
     }
 
     updateById<D extends Prisma.Args<T, "update">["data"]>(
@@ -230,7 +234,7 @@ export abstract class BaseRepository<T> {
         transaction?: Tx
     ): Promise<Prisma.Result<T, { where: { id: number }; data: D }, "update">> {
         return this.getModel(transaction).update({
-            where: { id },
+            where: this.withSoftDelete({ id }),
             data,
         });
     }
@@ -239,7 +243,10 @@ export abstract class BaseRepository<T> {
         args: A,
         transaction?: Tx
     ): Promise<Prisma.Result<T, A, "updateMany">> {
-        return this.getModel(transaction).updateMany(args);
+        return this.getModel(transaction).updateMany({
+            ...args,
+            where: this.withSoftDelete(args.where),
+        });
     }
 
     delete<A extends Prisma.Args<T, "delete">>(
@@ -248,7 +255,7 @@ export abstract class BaseRepository<T> {
     ): Promise<Prisma.Result<T, A, "delete">> {
         if (this.softDelete) {
             return this.getModel(transaction).update({
-                where: args.where,
+                where: this.withSoftDelete(args.where),
                 data: {
                     deletedAt: new Date(),
                 },
@@ -264,7 +271,7 @@ export abstract class BaseRepository<T> {
     ): Promise<Prisma.Result<T, { where: { id: number } }, "delete">> {
         if (this.softDelete) {
             return this.getModel(transaction).update({
-                where: { id },
+                where: this.withSoftDelete({ id }),
                 data: {
                     deletedAt: new Date(),
                 },
@@ -282,7 +289,7 @@ export abstract class BaseRepository<T> {
     ): Promise<Prisma.Result<T, A, "deleteMany">> {
         if (this.softDelete) {
             return this.getModel(transaction).updateMany({
-                where: args.where,
+                where: this.withSoftDelete(args.where),
                 data: {
                     deletedAt: new Date(),
                 },
@@ -308,6 +315,7 @@ export abstract class BaseRepository<T> {
         });
     }
 
+    /** Not soft-delete aware: a soft-deleted row still matches `where` and is updated. */
     upsert<A extends Prisma.Args<T, "upsert">>(
         args: A,
         transaction?: Tx

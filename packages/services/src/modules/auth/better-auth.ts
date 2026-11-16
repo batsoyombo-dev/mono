@@ -1,6 +1,8 @@
 import { prismaAdapter } from "@better-auth/prisma-adapter";
 import { betterAuth } from "better-auth";
 
+import type { RedisCache } from "@mono/cache";
+import { cache } from "@mono/cache";
 import type { PrismaClient } from "@mono/database";
 import { prisma } from "@mono/database";
 import { env } from "@mono/env";
@@ -21,6 +23,8 @@ export type AuthSurface = {
 export type AuthDeps = {
     prisma: PrismaClient;
     emails: AuthEmails;
+    /** Shared store for rate-limit counters, so limits hold across API instances. */
+    rateLimitStore: Pick<RedisCache, "consumeRateLimit">;
     appName: string;
     /** Public origin of the API, used for callback and email links. */
     baseUrl: string;
@@ -36,6 +40,7 @@ function defaultAuthDeps(): AuthDeps {
     return {
         prisma,
         emails: authEmails,
+        rateLimitStore: cache.namespace("auth:"),
         appName: env.app.APP_NAME,
         baseUrl: env.app.BASE_URL,
         secret: BETTER_AUTH_SECRET,
@@ -56,6 +61,7 @@ export function createAuth(
     {
         prisma,
         emails,
+        rateLimitStore,
         appName,
         baseUrl,
         secret,
@@ -116,6 +122,26 @@ export function createAuth(
         session: {
             expiresIn: 7 * 24 * 60 * 60,
             updateAge: 24 * 60 * 60,
+            // A signed cookie caches the session, so most requests skip the sessions query.
+            // Trade-off: a revoked session keeps working for up to maxAge seconds.
+            cookieCache: { enabled: true, maxAge: 5 * 60 },
+        },
+        // Enabled in production by default. Counters live in Redis, not process memory, so
+        // the limit is shared by every API instance. Behind a proxy, make sure it sets
+        // X-Forwarded-For (Better Auth's default client IP header).
+        rateLimit: {
+            customStorage: {
+                async consume(key, { window, max }) {
+                    const result = await rateLimitStore.consumeRateLimit(key, {
+                        windowMs: window * 1000,
+                        max,
+                    });
+                    return {
+                        allowed: result.allowed,
+                        retryAfter: result.allowed ? null : Math.ceil(result.resetInMs / 1000),
+                    };
+                },
+            },
         },
     });
 }

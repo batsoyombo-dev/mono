@@ -6,7 +6,7 @@ import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ElysiaAdapter } from "@bull-board/elysia";
 import { Elysia } from "elysia";
 
-import { queues } from "@mono/services";
+import { queues } from "@mono/services/queues";
 
 import type { AdminAccess } from "../controllers";
 import { getAuthorizedAdminUserId } from "../controllers";

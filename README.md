@@ -13,7 +13,9 @@ bun run seed                # demo@example.com / password123
 bun run dev                 # api on :3000 + mq-worker
 ```
 
-Outgoing email lands in Mailpit at http://localhost:8025. The queue dashboard is at http://localhost:3000/admin/queues (admins only, see AGENTS.md).
+Outgoing email lands in Mailpit at http://localhost:8025. The queue dashboard is at http://localhost:3000/admin/queues (admins only, see AGENTS.md) and the API docs at http://localhost:3000/openapi.
+
+Ports already taken (a Homebrew PostgreSQL or Redis, another project)? Set `POSTGRES_PORT` / `REDIS_PORT` in `.env`, update `DATABASE_URL` / `REDIS_URL` to match, and run `bun run infra:up` again.
 
 Requirements: Bun 1.4+, Docker (or your own PostgreSQL and Redis).
 
@@ -29,6 +31,7 @@ apps/
   mq-worker/          BullMQ worker; src/schedules.ts holds the cron jobs
 packages/
   services/           business logic: modules, repositories, queues, clients
+                      (imported by area: @mono/services/notes, /queues, /mail, ...)
   database/           Prisma schema, migrations, client
   env/                typed env: shared variable groups (env.<group>) + defineEnv for apps
   error-handling/     AppError hierarchy + process/shutdown handling
@@ -74,4 +77,10 @@ bun run start:api
 bun run start:mq-worker
 ```
 
-The API and the worker are separate long-running processes. Both handle `SIGTERM` gracefully. The worker build copies the email templates from `packages/services/src/clients/mail/templates` into `dist/templates`.
+The API and the worker are separate long-running processes. Both handle `SIGTERM` gracefully: they stop taking work, let in-flight requests and jobs finish (up to 10 seconds), then close every connection. The worker build copies the email templates from `packages/services/src/clients/mail/templates` into `dist/templates`.
+
+Probes: the API serves `GET /health` (liveness) and `GET /health/ready` (database and Redis); the worker serves `GET /health` on `WORKER_HEALTH_PORT` when set. Production checklist:
+
+- `NODE_ENV=production`, `TZ=UTC`, a real `BETTER_AUTH_SECRET`, and `ADMIN_EMAILS` without the demo user.
+- `REDIS_URL` pointing at a Redis with `maxmemory-policy noeviction` (BullMQ); put the cache on `CACHE_REDIS_URL` if it should evict.
+- A proxy that sets `X-Forwarded-For`, so auth rate limits see client IPs.

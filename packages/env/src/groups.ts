@@ -30,7 +30,10 @@ export const envGroups = {
     },
 
     redis: {
+        /** BullMQ and auth rate limits. Must use `maxmemory-policy noeviction`. */
         REDIS_URL: z.url(),
+        /** Optional separate Redis for `cache` (may evict keys). Defaults to REDIS_URL. */
+        CACHE_REDIS_URL: optional(z.url()),
     },
 
     auth: {

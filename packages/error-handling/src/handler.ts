@@ -2,7 +2,7 @@ import { inspect } from "node:util";
 
 import { logger } from "@mono/logger";
 
-import { AppError, InternalServerError } from "./exceptions";
+import { toAppError } from "./normalize";
 
 type ShutdownHandler = () => void | Promise<void>;
 
@@ -11,20 +11,6 @@ const SHUTDOWN_TIMEOUT_MS = 10_000;
 let isListening = false;
 let isTerminating = false;
 const shutdownHandlers = new Set<ShutdownHandler>();
-
-const normalizeError = (errorToHandle: unknown): AppError => {
-    if (errorToHandle instanceof AppError) {
-        return errorToHandle;
-    }
-    if (errorToHandle instanceof Error) {
-        const appError = new InternalServerError(errorToHandle.message);
-        appError.stack = errorToHandle.stack;
-        return appError;
-    }
-    return new InternalServerError(
-        `Error handler received a non-error value: ${inspect(errorToHandle)}`
-    );
-};
 
 const terminateAndExit = async (exitCode: number) => {
     if (isTerminating) return;
@@ -37,7 +23,9 @@ const terminateAndExit = async (exitCode: number) => {
     }, SHUTDOWN_TIMEOUT_MS);
     timeout.unref();
 
-    const results = await Promise.allSettled(Array.from(shutdownHandlers, (handler) => handler()));
+    const results = await Promise.allSettled(
+        Array.from(shutdownHandlers, async (handler) => handler())
+    );
     for (const result of results) {
         if (result.status === "rejected") {
             logger.error("Shutdown handler failed", { error: result.reason });
@@ -79,7 +67,7 @@ const errorHandler = {
 
     handleError: async (errorToHandle: unknown) => {
         try {
-            const appError = normalizeError(errorToHandle);
+            const appError = toAppError(errorToHandle);
             logger.error(appError.message, { error: appError });
             if (!appError.isTrusted) {
                 await terminateAndExit(1);
