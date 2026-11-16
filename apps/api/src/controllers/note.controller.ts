@@ -24,7 +24,8 @@ type NoteControllerOptions = {
 export function createNoteController({ auth, notes }: NoteControllerOptions) {
     return (
         new Elysia({ prefix: "/notes", name: "Notes", detail: { tags: ["notes"] } })
-            // derive runs before validation, so unauthenticated callers get 401, not 422.
+            // derive runs after the body is parsed but before it is validated: an unauthenticated
+            // call gets 401 rather than 422 (a malformed JSON body is still a 400 first).
             .derive(async ({ request }) => ({
                 actorUserId: await getAuthorizedSessionUserId(auth, request),
             }))

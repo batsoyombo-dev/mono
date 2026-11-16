@@ -1,6 +1,6 @@
 /**
  * Queue operations from the terminal: inspect jobs, trigger jobs and schedules, retry, pause.
- * Prints JSON to stdout; logs go to stderr. Exit code 1 on failure.
+ * Prints JSON to stdout; logs and errors go to stderr. Exit code 1 on failure.
  *
  *   bun run queue help
  */
@@ -9,12 +9,14 @@ import "./config";
 
 import { parseArgs } from "node:util";
 
-import { AppError, ValidationError } from "@mono/error-handling";
+import { toAppError, ValidationError } from "@mono/error-handling";
 import { logger, redirectLogsToStderr } from "@mono/logger";
 import { closeServices } from "@mono/services/lifecycle";
 import { queueService } from "@mono/services/queue";
 import type { Queues } from "@mono/services/queues";
 import { QueueNameSchema } from "@mono/services/queues";
+
+import { formatCliError, parseDuration, parseInteger } from "./cli-args";
 
 redirectLogsToStderr();
 
@@ -52,23 +54,6 @@ const { values, positionals } = parseArgs({
         limit: { type: "string" },
     },
 });
-
-const DURATION_UNITS: Record<string, number> = {
-    ms: 1,
-    s: 1000,
-    m: 60_000,
-    h: 3_600_000,
-    d: 86_400_000,
-};
-
-function duration(value: string | undefined): number | undefined {
-    if (value === undefined) return undefined;
-    const match = /^(\d+)(ms|s|m|h|d)?$/.exec(value.trim());
-    if (!match) throw new ValidationError(`Invalid duration "${value}"`);
-    return Number(match[1]) * DURATION_UNITS[match[2] ?? "ms"]!;
-}
-
-const int = (value: string | undefined) => (value === undefined ? undefined : Number(value));
 
 function arg(index: number, name: string): string {
     const value = positionals[index];
@@ -109,8 +94,8 @@ async function run(command: string | undefined): Promise<unknown> {
                 ...actor,
                 queue: queueArg(),
                 status: values.status as never,
-                page: int(values.page),
-                pageSize: int(values["page-size"]),
+                page: parseInteger(values.page, "page"),
+                pageSize: parseInteger(values["page-size"], "page-size"),
             });
         case "job":
             return queueService.getJob({ ...actor, queue: queueArg(), jobId: arg(2, "jobId") });
@@ -120,8 +105,8 @@ async function run(command: string | undefined): Promise<unknown> {
                 queue: queueArg(),
                 name: arg(2, "name"),
                 data: json(positionals[3]),
-                delayMs: duration(values.delay),
-                priority: int(values.priority),
+                delayMs: parseDuration(values.delay, "delay"),
+                priority: parseInteger(values.priority, "priority"),
                 jobId: values["job-id"],
             });
         case "trigger":
@@ -147,8 +132,8 @@ async function run(command: string | undefined): Promise<unknown> {
                 ...actor,
                 queue: queueArg(),
                 status: values.status as never,
-                olderThanMs: duration(values["older-than"]),
-                limit: int(values.limit),
+                olderThanMs: parseDuration(values["older-than"], "older-than"),
+                limit: parseInteger(values.limit, "limit"),
             });
         default:
             throw new ValidationError(
@@ -168,12 +153,9 @@ try {
         process.stdout.write(`${USAGE}\n`);
     } else {
         exitCode = 1;
-        const output =
-            error instanceof ValidationError
-                ? { error: error.message, issues: error.issues }
-                : { error: error instanceof Error ? error.message : String(error) };
-        process.stderr.write(`${JSON.stringify(output, null, 2)}\n`);
-        if (!(error instanceof AppError)) logger.error("Queue command failed", { error });
+        process.stderr.write(`${formatCliError(error)}\n`);
+        // Bad input is the caller's to fix; anything else is a fault worth a full log line.
+        if (toAppError(error).statusCode >= 500) logger.error("Queue command failed", { error });
     }
 } finally {
     await closeServices();

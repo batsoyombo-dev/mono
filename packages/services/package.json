@@ -5,6 +5,7 @@
     "private": true,
     "exports": {
         "./queues": "./src/queues/index.ts",
+        "./queues/schema": "./src/queues/schema.ts",
         "./mail": "./src/clients/mail/index.ts",
         "./storage": "./src/clients/storage.ts",
         "./filters": "./src/utils/filters.ts",

@@ -1,5 +1,7 @@
 import { inspect } from "node:util";
 
+import { logger } from "@mono/logger";
+
 import type { ValidationIssue } from "./exceptions";
 import {
     AppError,
@@ -42,6 +44,20 @@ function isPrismaKnownError(
     );
 }
 
+function isPrismaValidationError(error: unknown): error is Error {
+    return error instanceof Error && error.name === "PrismaClientValidationError";
+}
+
+/**
+ * `LockError` from `@mono/cache` (`withLock` could not acquire the lock). Matched by name and
+ * code because this package may not import `@mono/cache`.
+ */
+function isLockError(error: unknown): error is Error {
+    if (!(error instanceof Error) || error.name !== "LockError") return false;
+    const code = (error as { code?: unknown }).code;
+    return code === "LOCKED" || code === "LOCK_TIMEOUT";
+}
+
 function uniqueFields(meta: Record<string, unknown> | undefined): string {
     const target = meta?.target;
     if (Array.isArray(target)) return target.join(", ");
@@ -65,6 +81,9 @@ function uniqueFields(meta: Record<string, unknown> | undefined): string {
  * - `ZodError` (from `schema.parse`) becomes `ValidationError` (422).
  * - Prisma P2002 (unique) becomes `ConflictError` (409), P2025 (record not found) `NotFoundError`
  *   (404), P2003 (foreign key) `BadRequestError` (400).
+ * - Prisma `PrismaClientValidationError` (a malformed query) becomes `BadRequestError` (400)
+ *   with a generic message; the details are logged, never sent.
+ * - `LockError` from `@mono/cache` (`withLock` found the lock taken) becomes `ConflictError` (409).
  * - Anything else becomes an untrusted `InternalServerError` (500) keeping the original stack.
  */
 export function toAppError(error: unknown): AppError {
@@ -87,6 +106,15 @@ export function toAppError(error: unknown): AppError {
             case "P2003":
                 return new BadRequestError("A related record does not exist");
         }
+    }
+
+    if (isPrismaValidationError(error)) {
+        logger.warn("Prisma rejected the query", { error });
+        return new BadRequestError("Invalid query");
+    }
+
+    if (isLockError(error)) {
+        return new ConflictError("The resource is busy, try again later");
     }
 
     if (error instanceof Error) {

@@ -58,6 +58,27 @@ describe("toAppError", () => {
         expect(toAppError(prismaError("P2003"))).toBeInstanceOf(BadRequestError);
     });
 
+    test("maps PrismaClientValidationError to a generic 400", () => {
+        const error = Object.assign(new Error("Invalid `prisma.user.findMany()` invocation: ..."), {
+            name: "PrismaClientValidationError",
+        });
+        const appError = toAppError(error);
+
+        expect(appError).toBeInstanceOf(BadRequestError);
+        expect(appError.message).toBe("Invalid query");
+    });
+
+    test("maps a LockError from @mono/cache to a 409", () => {
+        const error = Object.assign(new Error("Lock jobs:1 is held"), {
+            name: "LockError",
+            code: "LOCKED",
+        });
+        const appError = toAppError(error);
+
+        expect(appError).toBeInstanceOf(ConflictError);
+        expect(appError.statusCode).toBe(409);
+    });
+
     test("wraps anything else as an untrusted 500 keeping the stack", () => {
         const original = new Error("boom");
         const appError = toAppError(original);

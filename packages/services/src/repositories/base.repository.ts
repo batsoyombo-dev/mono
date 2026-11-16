@@ -12,6 +12,21 @@ type BaseRepositoryOptions = {
     softDelete?: boolean;
 };
 
+/**
+ * Prisma model wrapper shared by every repository.
+ *
+ * Soft delete (`{ softDelete: true }`): the methods here add `deletedAt: null` to the top-level
+ * `where` of reads, counts, aggregates, updates and deletes, and deletes set `deletedAt` instead
+ * of removing the row. Limits:
+ * - Relations are **not** filtered. `include: { notes: true }`, `select: { notes: ... }` and
+ *   relation filters such as `where: { notes: { some: ... } }` still see soft-deleted related
+ *   rows. Add `where: { deletedAt: null }` inside the relation yourself
+ *   (`include: { notes: { where: { deletedAt: null } } }`, `notes: { some: { deletedAt: null, ... } }`).
+ * - `upsert` is passed through unchanged: a soft-deleted row that matches `where` is updated and
+ *   stays deleted. `upsertById` treats a soft-deleted row as missing instead (see there).
+ * - `create`, `createMany` and `createManyAndReturn` are unaffected; raw queries
+ *   (`$queryRaw`) and direct `prisma.<model>` calls bypass all of this.
+ */
 export abstract class BaseRepository<T> {
     protected readonly model: any;
     protected readonly clientModelName: Prisma.TypeMap["meta"]["modelProps"];
@@ -91,6 +106,11 @@ export abstract class BaseRepository<T> {
         });
     }
 
+    /**
+     * One page plus the total count. The two queries run in parallel outside a transaction, so
+     * under concurrent writes `total` can be slightly out of step with `collection`. Pass a
+     * transaction if a list must be exactly consistent.
+     */
     async getManyWithPage<A extends Prisma.Args<T, "findMany">>(
         pagination: PaginationRequest,
         args?: A,
@@ -249,12 +269,17 @@ export abstract class BaseRepository<T> {
         });
     }
 
+    /**
+     * On soft-delete repositories, sets `deletedAt` and returns the row shaped by `select` /
+     * `include`. Deleting a row that is already deleted throws P2025 (404).
+     */
     delete<A extends Prisma.Args<T, "delete">>(
         args: A,
         transaction?: Tx
     ): Promise<Prisma.Result<T, A, "delete">> {
         if (this.softDelete) {
             return this.getModel(transaction).update({
+                ...args,
                 where: this.withSoftDelete(args.where),
                 data: {
                     deletedAt: new Date(),
@@ -315,7 +340,10 @@ export abstract class BaseRepository<T> {
         });
     }
 
-    /** Not soft-delete aware: a soft-deleted row still matches `where` and is updated. */
+    /**
+     * Not soft-delete aware: a soft-deleted row still matches `where` and is updated (it stays
+     * deleted). Add `deletedAt: null` to `where` yourself, or use `upsertById`.
+     */
     upsert<A extends Prisma.Args<T, "upsert">>(
         args: A,
         transaction?: Tx
@@ -327,7 +355,21 @@ export abstract class BaseRepository<T> {
         args: A,
         transaction?: Tx
     ): Promise<Prisma.Result<T, A, "aggregate">> {
-        return this.getModel(transaction).aggregate(args);
+        return this.getModel(transaction).aggregate({
+            ...args,
+            where: this.withSoftDelete(args.where),
+        });
+    }
+
+    /** `groupBy` with soft-deleted rows skipped. `A` is Prisma's groupBy args for the model. */
+    groupBy<A extends Prisma.Args<T, "groupBy">>(
+        args: A,
+        transaction?: Tx
+    ): Promise<Prisma.Result<T, A, "groupBy">> {
+        return this.getModel(transaction).groupBy({
+            ...args,
+            where: this.withSoftDelete(args.where),
+        });
     }
 
     count<A extends Prisma.Args<T, "count">>(
@@ -355,13 +397,19 @@ export abstract class BaseRepository<T> {
         return this.getModel(transaction).createManyAndReturn(args);
     }
 
+    /**
+     * Updates the row with this id, or creates one. On soft-delete repositories a soft-deleted
+     * row counts as missing, consistent with every other read: it is not updated, and `create`
+     * runs instead (a `create` that reuses the deleted row's id fails with P2002, a 409). Restore
+     * the row with `restoreMany` first if you meant to revive it.
+     */
     upsertById<
         C extends Prisma.Args<T, "upsert">["create"],
         U extends Prisma.Args<T, "upsert">["update"],
     >(id: number, create: C, update: U, transaction?: Tx) {
         return this.upsert(
             {
-                where: { id },
+                where: this.withSoftDelete({ id }),
                 create,
                 update,
             } as Prisma.Args<T, "upsert">,

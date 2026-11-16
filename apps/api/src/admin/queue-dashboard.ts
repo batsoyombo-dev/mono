@@ -4,18 +4,18 @@ import { fileURLToPath } from "node:url";
 import { createBullBoard } from "@bull-board/api";
 import { BullMQAdapter } from "@bull-board/api/bullMQAdapter";
 import { ElysiaAdapter } from "@bull-board/elysia";
-import { Elysia } from "elysia";
 
 import { queues } from "@mono/services/queues";
 
 import type { AdminAccess } from "../controllers";
-import { getAuthorizedAdminUserId } from "../controllers";
+import { adminOnly } from "../plugins/admin-only.plugin";
 
 export const QUEUE_DASHBOARD_PATH = "/admin/queues";
 
 /**
  * Bull Board web UI for every queue: recent jobs by status, payloads, logs, errors, retry,
- * promote, clean, pause. Same Better Auth session cookie and admin rule as /api/v1/admin.
+ * promote, clean, pause. Same Better Auth session cookie and admin rule as /api/v1/admin;
+ * `adminOnly` guards every route the board registers (page, static assets and its JSON API).
  * Lives outside the request layer because it needs the real BullMQ queues.
  */
 export async function createQueueDashboard(access: AdminAccess) {
@@ -34,17 +34,5 @@ export async function createQueueDashboard(access: AdminAccess) {
         },
     });
 
-    const board = await serverAdapter.registerPlugin();
-
-    return new Elysia({ name: "QueueDashboard" })
-        .onRequest(async ({ request }) => {
-            const { pathname } = new URL(request.url);
-            if (
-                pathname === QUEUE_DASHBOARD_PATH ||
-                pathname.startsWith(`${QUEUE_DASHBOARD_PATH}/`)
-            ) {
-                await getAuthorizedAdminUserId(access, request);
-            }
-        })
-        .use(board);
+    return adminOnly(access, await serverAdapter.registerPlugin());
 }

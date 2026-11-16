@@ -27,7 +27,7 @@ function elysiaIssues(error: unknown): ValidationIssue[] {
  * errors are mapped by `toAppError` (422, 409, 404, 400). Anything else is logged and returned
  * as a generic 500, so internal messages never reach the client.
  */
-function toResponse(code: unknown, error: unknown, request: Request): Response {
+function toResponse(code: unknown, error: unknown, request: Request, path: string): Response {
     switch (code) {
         case "VALIDATION":
             return failure(422, "Validation failed", elysiaIssues(error));
@@ -49,7 +49,7 @@ function toResponse(code: unknown, error: unknown, request: Request): Response {
             error: appError,
             requestId: getRequestId(request),
             method: request.method,
-            path: new URL(request.url).pathname,
+            path,
         });
         return failure(500, "Internal server error");
     }
@@ -62,8 +62,8 @@ function toResponse(code: unknown, error: unknown, request: Request): Response {
 }
 
 export const errorResponsePlugin = new Elysia({ name: "ErrorResponse" })
-    .onError(({ code, error, request, set }) => {
-        const response = toResponse(code, error, request);
+    .onError(({ code, error, request, path, set }) => {
+        const response = toResponse(code, error, request, path);
         // Keep Elysia's view of the status in sync, so the request log reports what was sent.
         set.status = response.status;
         return response;

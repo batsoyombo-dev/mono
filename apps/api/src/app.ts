@@ -13,6 +13,8 @@ type CreateAppOptions = ApiDependencies & {
     allowedOrigins: string[];
     /** Checks behind `GET /health/ready` (database, Redis, ...). */
     readiness: ReadinessChecks;
+    /** How long each readiness check may take (default 3 s). */
+    readinessTimeoutMs?: number;
     /** Serve OpenAPI docs at /openapi (UI) and /openapi/json. Off in production by default. */
     docs?: boolean;
     /** Extra mounted apps that need real infrastructure, such as the queue dashboard. */
@@ -22,6 +24,7 @@ type CreateAppOptions = ApiDependencies & {
 export function createApp({
     allowedOrigins,
     readiness,
+    readinessTimeoutMs,
     docs = false,
     plugins = [],
     ...dependencies
@@ -54,7 +57,9 @@ export function createApp({
         );
     }
 
-    app.use(createHealthController(readiness)).use(createApi(dependencies));
+    app.use(createHealthController(readiness, { timeoutMs: readinessTimeoutMs })).use(
+        createApi(dependencies)
+    );
 
     for (const plugin of plugins) app.use(plugin);
 

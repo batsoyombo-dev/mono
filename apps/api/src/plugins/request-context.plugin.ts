@@ -25,7 +25,8 @@ function statusOf(response: unknown, status: unknown): number {
 
 /**
  * Gives every request an id (`x-request-id`, reused when the caller sends a valid one) and logs
- * one line per request with method, path, status and duration. Health checks are not logged.
+ * one line per request with method, routed path, status and duration. Health checks are not
+ * logged.
  */
 export const requestContextPlugin = new Elysia({ name: "RequestContext" })
     .onRequest(({ request, set }) => {
@@ -34,9 +35,10 @@ export const requestContextPlugin = new Elysia({ name: "RequestContext" })
         contexts.set(request, { id, startedAt: performance.now() });
         set.headers[REQUEST_ID_HEADER] = id;
     })
-    .onAfterResponse(({ request, set, responseValue }) => {
+    // `path` is the path Elysia routed, which can differ from the URL's parsed pathname for
+    // unusual URLs; both are logged when they differ.
+    .onAfterResponse(({ request, path, set, responseValue }) => {
         const context = contexts.get(request);
-        const path = new URL(request.url).pathname;
         if (
             !context ||
             quietPaths.some((quiet) => path === quiet || path.startsWith(`${quiet}/`))
@@ -44,10 +46,12 @@ export const requestContextPlugin = new Elysia({ name: "RequestContext" })
             return;
         }
 
+        const urlPath = new URL(request.url).pathname;
         logger.info("HTTP request", {
             requestId: context.id,
             method: request.method,
             path,
+            ...(urlPath === path ? {} : { urlPath }),
             status: statusOf(responseValue, set.status),
             durationMs: Math.round(performance.now() - context.startedAt),
         });

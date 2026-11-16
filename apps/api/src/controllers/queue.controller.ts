@@ -26,7 +26,8 @@ export function createQueueController({ queues, ...access }: QueueControllerOpti
             name: "AdminQueues",
             detail: { tags: ["admin"] },
         })
-            // derive runs before validation, so unauthenticated callers get 401/403, not 422.
+            // derive runs after the body is parsed but before it is validated: an unauthenticated
+            // or non-admin call gets 401/403 rather than 422 (a malformed JSON body is still 400).
             .derive(async ({ request }) => ({
                 actorUserId: await getAuthorizedAdminUserId(access, request),
             }))

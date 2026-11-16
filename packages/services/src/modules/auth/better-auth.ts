@@ -30,12 +30,20 @@ export type AuthDeps = {
     baseUrl: string;
     secret: string;
     trustedOrigins: string[];
+    /**
+     * IPs or CIDR ranges of the reverse proxies in front of the API. The client IP (used for
+     * rate limits and stored on sessions) is the first `X-Forwarded-For` hop, read from the
+     * right, that is not one of these. Empty: only a single-entry header is trusted, so a
+     * request that went through a proxy chain gets no client IP.
+     */
+    trustedProxies: string[];
     /** Enables Google sign-in when set. */
     google?: { clientId: string; clientSecret: string };
 };
 
 function defaultAuthDeps(): AuthDeps {
-    const { BETTER_AUTH_SECRET, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } = env.auth;
+    const { BETTER_AUTH_SECRET, TRUSTED_PROXIES, GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET } =
+        env.auth;
 
     return {
         prisma,
@@ -45,6 +53,7 @@ function defaultAuthDeps(): AuthDeps {
         baseUrl: env.app.BASE_URL,
         secret: BETTER_AUTH_SECRET,
         trustedOrigins: env.app.CORS_ORIGINS,
+        trustedProxies: TRUSTED_PROXIES,
         google:
             GOOGLE_CLIENT_ID && GOOGLE_CLIENT_SECRET
                 ? { clientId: GOOGLE_CLIENT_ID, clientSecret: GOOGLE_CLIENT_SECRET }
@@ -66,6 +75,7 @@ export function createAuth(
         baseUrl,
         secret,
         trustedOrigins,
+        trustedProxies,
         google,
     }: AuthDeps = defaultAuthDeps()
 ) {
@@ -83,6 +93,11 @@ export function createAuth(
                 generateId: "serial",
             },
             cookiePrefix,
+            ipAddress: {
+                // X-Forwarded-For is the default header. Any client can send it, so only the
+                // hops appended by the proxies listed here are skipped (see AuthDeps).
+                trustedProxies,
+            },
         },
         emailVerification: {
             expiresIn: 60 * 60,
@@ -127,8 +142,11 @@ export function createAuth(
             cookieCache: { enabled: true, maxAge: 5 * 60 },
         },
         // Enabled in production by default. Counters live in Redis, not process memory, so
-        // the limit is shared by every API instance. Behind a proxy, make sure it sets
-        // X-Forwarded-For (Better Auth's default client IP header).
+        // the limit is shared by every API instance. Limits are per client IP, read from
+        // X-Forwarded-For with `trustedProxies` (TRUSTED_PROXIES). Behind proxies, list their
+        // addresses there: otherwise a header with several hops yields no client IP, and all
+        // such requests share one bucket. Clients that reach the API directly can set the
+        // header themselves, so only expose the API through the proxy.
         rateLimit: {
             customStorage: {
                 async consume(key, { window, max }) {

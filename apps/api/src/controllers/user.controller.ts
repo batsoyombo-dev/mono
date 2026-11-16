@@ -13,27 +13,21 @@ type UserControllerOptions = {
 };
 
 export function createUserController({ auth, users }: UserControllerOptions) {
-    const getActorUserId = (request: Request) => getAuthorizedSessionUserId(auth, request);
-
-    return new Elysia({
-        prefix: "/users",
-        name: "Users",
-        detail: { tags: ["users"] },
-    })
-        .get("/me", async ({ request }) =>
-            success({
-                user: await users.getProfile({ actorUserId: await getActorUserId(request) }),
-            })
-        )
-        .patch(
-            "/me",
-            async ({ request, body }) =>
-                success({
-                    user: await users.updateProfile({
-                        ...body,
-                        actorUserId: await getActorUserId(request),
-                    }),
-                }),
-            { body: updateProfileSchema }
-        );
+    return (
+        new Elysia({ prefix: "/users", name: "Users", detail: { tags: ["users"] } })
+            // derive runs after the body is parsed but before it is validated: an unauthenticated
+            // call gets 401 rather than 422 (a malformed JSON body is still a 400 first).
+            .derive(async ({ request }) => ({
+                actorUserId: await getAuthorizedSessionUserId(auth, request),
+            }))
+            .get("/me", async ({ actorUserId }) =>
+                success({ user: await users.getProfile({ actorUserId }) })
+            )
+            .patch(
+                "/me",
+                async ({ actorUserId, body }) =>
+                    success({ user: await users.updateProfile({ ...body, actorUserId }) }),
+                { body: updateProfileSchema }
+            )
+    );
 }

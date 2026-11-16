@@ -28,9 +28,10 @@ apps/
     src/plugins/      error -> response envelope mapping
     src/seeds/        idempotent seeders run by `bun run seed`
     tests/            app.handle() tests with fake services
-  mq-worker/          BullMQ worker; src/schedules.ts holds the cron jobs
+  mq-worker/          BullMQ worker: job handlers (src/jobs) and the cron sync on start
 packages/
-  services/           business logic: modules, repositories, queues, clients
+  services/           business logic: modules, repositories, queues (cron jobs in
+                      src/queues/schedules.ts), clients
                       (imported by area: @mono/services/notes, /queues, /mail, ...)
   database/           Prisma schema, migrations, client
   env/                typed env: shared variable groups (env.<group>) + defineEnv for apps

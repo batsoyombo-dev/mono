@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { BadRequestError, ForbiddenError, NotFoundError } from "@mono/error-handling";
+import { ForbiddenError, NotFoundError, ValidationError } from "@mono/error-handling";
 
 import type { NoteServiceDeps } from "../src/modules/notes/service";
 import { createNoteService } from "../src/modules/notes/service";
@@ -119,11 +119,43 @@ describe("noteService", () => {
                             },
                         ],
                     },
-                    orderBy: [{ title: "asc" }],
+                    orderBy: [{ title: "asc" }, { id: "desc" }],
                     select: expect.any(Object),
                 },
             },
         ]);
+    });
+
+    test("orders by pinned, newest first, with an id tiebreaker when no sort is sent", async () => {
+        const { service, calls } = fakeNotes();
+
+        await service.listNotes({ actorUserId: 42 });
+
+        expect(calls.list).toEqual([
+            {
+                pagination: expect.any(Object),
+                args: expect.objectContaining({
+                    orderBy: [{ pinned: "desc" }, { createdAt: "desc" }, { id: "desc" }],
+                }),
+            },
+        ]);
+    });
+
+    test("rejects a filter whose type or operator does not fit the field", async () => {
+        const { service } = fakeNotes();
+
+        await expect(
+            service.listNotes({
+                actorUserId: 42,
+                filters: [{ id: "pinned", type: "text", operator: "contains", value: "x" }],
+            })
+        ).rejects.toBeInstanceOf(ValidationError);
+        await expect(
+            service.listNotes({
+                actorUserId: 42,
+                filters: [{ id: "createdAt", type: "date", operator: "blank", value: "" }],
+            })
+        ).rejects.toBeInstanceOf(ValidationError);
     });
 
     test("rejects filters on fields that are not allowlisted", async () => {
@@ -134,6 +166,6 @@ describe("noteService", () => {
                 actorUserId: 42,
                 filters: [{ id: "userId", type: "number", operator: "equals", value: 7 }],
             })
-        ).rejects.toBeInstanceOf(BadRequestError);
+        ).rejects.toBeInstanceOf(ValidationError);
     });
 });

@@ -1,4 +1,4 @@
-import type { InferJobs } from "../job-schemas";
+import type { InferJobInputs, InferJobs } from "../job-schemas";
 import { healthSchema, mailSchema } from "./schemas";
 
 /** Every job the default queue accepts. Add a job here, then a handler in apps/mq-worker. */
@@ -8,3 +8,4 @@ export const defaultQueueJobSchemas = {
 };
 
 export type DefaultQueueJobs = InferJobs<typeof defaultQueueJobSchemas>;
+export type DefaultQueueJobInputs = InferJobInputs<typeof defaultQueueJobSchemas>;

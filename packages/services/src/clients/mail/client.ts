@@ -1,12 +1,10 @@
-import { readFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
-import handlebars from "handlebars";
 import nodemailer, { type SendMailOptions, type Transporter } from "nodemailer";
 
 import { env } from "@mono/env";
 
+import type { MailEncryption, SmtpTimeouts } from "./smtp";
+import { DEFAULT_SMTP_TIMEOUTS, tlsOptions } from "./smtp";
+import { renderTemplate } from "./templates";
 import type {
     EmailResult,
     EmailWithAttachmentsOptions,
@@ -14,11 +12,6 @@ import type {
     PlainTextEmailOptions,
     TemplateEmailOptions,
 } from "./types";
-
-// In development this resolves next to the source; app builds copy templates into dist/templates.
-const templatesDir = resolve(dirname(fileURLToPath(import.meta.url)), "templates");
-const templateNamePattern = /^[a-zA-Z0-9_-]+$/;
-const compiledTemplates = new Map<string, HandlebarsTemplateDelegate>();
 
 function stripHtml(html: string): string {
     return html
@@ -32,10 +25,15 @@ export type MailClientOptions = {
     smtp: {
         host: string;
         port: number;
-        /** TLS on: implicit TLS on port 465, STARTTLS required on any other port. */
-        encryption: boolean;
+        /**
+         * `ssl`: implicit TLS. `starttls`: plain connection that must upgrade with STARTTLS.
+         * `none`: no TLS, even if the server offers it. `auto`: `ssl` on port 465, else `starttls`.
+         */
+        encryption: MailEncryption;
         username?: string;
         password?: string;
+        /** Milliseconds; defaults keep a hung SMTP server from outliving a shutdown grace period. */
+        timeouts?: Partial<SmtpTimeouts>;
     };
     /** Default sender when a message sets no `from`. */
     from: { name: string; address: string };
@@ -46,23 +44,6 @@ export type MailClientOptions = {
 
 export type MailClient = ReturnType<typeof createMailClient>;
 
-async function renderTemplate(name: string, data: Record<string, unknown>): Promise<string> {
-    if (!templateNamePattern.test(name)) {
-        throw new Error(
-            "Template name may contain only letters, numbers, underscores, and hyphens"
-        );
-    }
-
-    let template = compiledTemplates.get(name);
-    if (!template) {
-        const source = await readFile(resolve(templatesDir, `${name}.hbs`), "utf8");
-        template = handlebars.compile(source);
-        compiledTemplates.set(name, template);
-    }
-
-    return template({ currentYear: new Date().getFullYear(), ...data });
-}
-
 /** Sends email over SMTP. The SMTP connection is created on the first send, not here. */
 export function createMailClient({ smtp, from, appName, baseUrl }: MailClientOptions) {
     let transporter: Transporter | null = null;
@@ -71,8 +52,10 @@ export function createMailClient({ smtp, from, appName, baseUrl }: MailClientOpt
         (transporter ??= nodemailer.createTransport({
             host: smtp.host,
             port: smtp.port,
-            secure: smtp.encryption && smtp.port === 465,
-            requireTLS: smtp.encryption && smtp.port !== 465,
+            ...tlsOptions(smtp.encryption, smtp.port),
+            connectionTimeout: smtp.timeouts?.connection ?? DEFAULT_SMTP_TIMEOUTS.connection,
+            greetingTimeout: smtp.timeouts?.greeting ?? DEFAULT_SMTP_TIMEOUTS.greeting,
+            socketTimeout: smtp.timeouts?.socket ?? DEFAULT_SMTP_TIMEOUTS.socket,
             auth: smtp.username ? { user: smtp.username, pass: smtp.password } : undefined,
         }));
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
-import type { EnvGroupName, EnvGroups, EnvSchema } from "./groups";
-import { envGroups } from "./groups";
+import type { EnvGroupName, EnvGroupRule, EnvGroups, EnvSchema } from "./groups";
+import { envGroupRules, envGroups } from "./groups";
 
 type EnvSource = Record<string, string | undefined>;
 
@@ -17,8 +17,20 @@ type UnionToIntersection<U> = (U extends unknown ? (value: U) => void : never) e
 /** The parsed variables of the chosen groups as one flat object. */
 type GroupsEnv<G extends EnvGroupName> = UnionToIntersection<{ [K in G]: Env<EnvGroups[K]> }[G]>;
 
-function parseEnv<S extends EnvSchema>(owner: string, schema: S, source: EnvSource): Env<S> {
-    const parsed = z.object(schema).safeParse(source);
+function parseEnv<S extends EnvSchema>(
+    owner: string,
+    schema: S,
+    source: EnvSource,
+    rules: EnvGroupRule[] = []
+): Env<S> {
+    const parsed = z
+        .object(schema)
+        .superRefine((values, ctx) => {
+            for (const message of rules.flatMap((rule) => rule(values, source))) {
+                ctx.addIssue({ code: "custom", message });
+            }
+        })
+        .safeParse(source);
 
     if (!parsed.success) {
         throw new Error(
@@ -30,6 +42,9 @@ function parseEnv<S extends EnvSchema>(owner: string, schema: S, source: EnvSour
 }
 
 const groupCache = new Map<EnvGroupName, unknown>();
+
+const rulesFor = (groups: readonly EnvGroupName[]): EnvGroupRule[] =>
+    groups.flatMap((name) => envGroupRules[name] ?? []);
 
 /**
  * Typed environment for packages, one property per group: `env.redis.REDIS_URL`. A group is
@@ -46,7 +61,10 @@ export const env = Object.freeze(
                     enumerable: true,
                     get: () => {
                         if (!groupCache.has(name)) {
-                            groupCache.set(name, parseEnv(name, envGroups[name], process.env));
+                            groupCache.set(
+                                name,
+                                parseEnv(name, envGroups[name], process.env, rulesFor([name]))
+                            );
                         }
                         return groupCache.get(name);
                     },
@@ -77,9 +95,20 @@ export function defineEnv<
     const groups = options.groups ?? (Object.keys(envGroups) as G[]);
     const schema = Object.assign({}, ...groups.map((name) => envGroups[name]), options.extend);
 
-    return parseEnv(owner, schema, options.source ?? process.env) as GroupsEnv<G> & Env<E>;
+    return parseEnv(
+        owner,
+        schema,
+        options.source ?? process.env,
+        rulesFor(groups)
+    ) as GroupsEnv<G> & Env<E>;
 }
 
-export { envGroups, type EnvGroupName, type EnvSchema } from "./groups";
+export {
+    envGroups,
+    PLACEHOLDER_AUTH_SECRET,
+    type EnvGroupName,
+    type EnvGroupRule,
+    type EnvSchema,
+} from "./groups";
 export { commaSeparated, optional, port } from "./helpers";
 export { runtimeConfig, type RuntimeConfig } from "./runtime";

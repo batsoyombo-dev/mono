@@ -46,8 +46,11 @@ const byteUnits = ["B", "KB", "MB", "GB", "TB"];
  * Formats a byte count, e.g. `formatBytes(1536)` -> "1.5 KB".
  */
 export function formatBytes(bytes: number): string {
-    if (bytes <= 0) return "0 B";
-    const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), byteUnits.length - 1);
+    if (!(bytes > 0)) return "0 B";
+    const exponent = Math.min(
+        Math.max(0, Math.floor(Math.log(bytes) / Math.log(1024))),
+        byteUnits.length - 1
+    );
     const value = bytes / 1024 ** exponent;
     return `${Number(value.toFixed(1))} ${byteUnits[exponent]}`;
 }

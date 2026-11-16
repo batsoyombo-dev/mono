@@ -34,12 +34,16 @@ export const enqueueJobSchema = z.object({
     data: z.unknown().default({}),
     delayMs: z.number().int().min(0).optional(),
     priority: z.number().int().min(1).max(2_097_152).optional(),
-    /** Optional dedupe key: a job with an existing id is not added twice. BullMQ forbids ":". */
+    /**
+     * Optional dedupe key: a job with an existing id is not added twice. BullMQ forbids ":" and
+     * integer ids (they would collide with its own numeric ids).
+     */
     jobId: z
         .string()
         .min(1)
         .max(200)
         .regex(/^[^:]+$/, "jobId must not contain ':'")
+        .refine((value) => !/^-?\d+$/.test(value), "jobId must not be an integer")
         .optional(),
 });
 

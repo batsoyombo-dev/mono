@@ -1,3 +1,5 @@
+import { envAccessSyntax } from "./base.js";
+
 /**
  * App entry points must import `./config` before anything else. It validates the whole
  * environment and reports every bad variable at once, before any package reads `env`.
@@ -11,8 +13,10 @@ export function configFirst(files) {
         {
             files,
             rules: {
+                // Replaces base.js's options for these files, so repeat its env-access entries.
                 "no-restricted-syntax": [
                     "error",
+                    ...envAccessSyntax,
                     {
                         selector:
                             'Program > :first-child:not(ImportDeclaration[source.value="./config"])',

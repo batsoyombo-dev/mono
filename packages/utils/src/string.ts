@@ -64,11 +64,14 @@ const cyrillicToLatinMap: { [key: string]: string } = {
 };
 
 /**
- * Truncates a string to a maximum length, adding a suffix if truncated.
+ * Truncates a string to at most `length` characters, ending with `suffix` when truncated.
+ * The result never exceeds `length`; when the suffix does not fit, the string is cut without it.
  */
 export function truncate(str: string, length: number, suffix = "..."): string {
-    if (str.length <= length) return str;
-    return str.slice(0, length - suffix.length) + suffix;
+    const max = Math.max(0, Math.floor(length));
+    if (str.length <= max) return str;
+    if (suffix.length >= max) return str.slice(0, max);
+    return str.slice(0, max - suffix.length) + suffix;
 }
 
 /**

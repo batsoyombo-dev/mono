@@ -137,6 +137,39 @@ describe("API", () => {
         expect(calls).toEqual([{ name: "Grace", actorUserId: 42 }]);
     });
 
+    test("checks the session before validating the body", async () => {
+        const calls: unknown[] = [];
+        const app = createTestApp({ session: null, users: fakeUsers(calls) });
+        const patch = (body: string) =>
+            app.handle(
+                new Request("http://localhost/api/v1/users/me", {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body,
+                })
+            );
+
+        // An invalid body from an anonymous caller is a 401, not a 422.
+        const invalid = await patch(JSON.stringify({ name: "" }));
+        expect(invalid.status).toBe(401);
+        // Body parsing runs before the session check, so malformed JSON is still a 400.
+        expect((await patch("{bad")).status).toBe(400);
+        expect(calls).toEqual([]);
+    });
+
+    test("rejects a session whose user id is not a positive integer", async () => {
+        for (const id of ["abc", "", "1.5", "-3", 0, "9007199254740993"]) {
+            const app = createTestApp({
+                session: { user: { id, email: "ada@example.com", emailVerified: true } },
+                users: fakeUsers(),
+            });
+
+            const response = await app.handle(new Request("http://localhost/api/v1/users/me"));
+
+            expect(response.status).toBe(401);
+        }
+    });
+
     test("rejects a malformed JSON body as a client error", async () => {
         const app = createTestApp({
             session: { user: { id: 42, email: "ada@example.com", emailVerified: true } },
@@ -264,13 +297,38 @@ describe("API", () => {
         }
     });
 
-    test("reports readiness per dependency", async () => {
+    test("logs the routed path, and the URL path when they differ", async () => {
+        const info = spyOn(logger, "info").mockImplementation(() => logger);
+        try {
+            // Elysia routes this to /api/v1/users/me although its parsed pathname is /zz/....
+            await createTestApp().handle(
+                new Request("http://x/zz/api/v1/users/me", {
+                    headers: { "x-request-id": "log-test-short-host" },
+                })
+            );
+            await Bun.sleep(5);
+
+            const calls = info.mock.calls as unknown as [string, Record<string, unknown>?][];
+            expect(calls.find(([, meta]) => meta?.requestId === "log-test-short-host")).toEqual([
+                "HTTP request",
+                expect.objectContaining({
+                    path: "/api/v1/users/me",
+                    urlPath: "/zz/api/v1/users/me",
+                    status: 401,
+                }),
+            ]);
+        } finally {
+            info.mockRestore();
+        }
+    });
+
+    test("reports readiness per dependency without leaking errors", async () => {
         const ready = createTestApp({ readiness: { database: async () => {} } });
         const notReady = createTestApp({
             readiness: {
                 database: async () => {},
                 cache: async () => {
-                    throw new Error("connection refused");
+                    throw new Error("connect ECONNREFUSED redis://:secret@10.0.0.5:6379");
                 },
             },
         });
@@ -281,11 +339,53 @@ describe("API", () => {
             data: { status: "ready", checks: { database: "ok" } },
         });
 
-        const failing = await notReady.handle(new Request("http://localhost/health/ready"));
-        expect(failing.status).toBe(503);
-        expect(await failing.json()).toMatchObject({
-            error: { issues: { database: "ok", cache: "connection refused" } },
+        const errorLog = spyOn(logger, "error").mockImplementation(() => logger);
+        try {
+            const failing = await notReady.handle(new Request("http://localhost/health/ready"));
+            expect(failing.status).toBe(503);
+            expect(await failing.json()).toEqual({
+                success: false,
+                status: 503,
+                error: {
+                    message: "Service not ready",
+                    issues: [{ path: "cache", message: "failed" }],
+                },
+            });
+            expect(errorLog).toHaveBeenCalledWith("Readiness check failed", {
+                check: "cache",
+                error: expect.any(Error),
+            });
+        } finally {
+            errorLog.mockRestore();
+        }
+    });
+
+    test("fails a readiness check that does not answer in time", async () => {
+        const app = createTestApp({
+            readinessTimeoutMs: 20,
+            readiness: {
+                database: async () => {},
+                queue: () => new Promise(() => {}),
+            },
         });
+
+        const errorLog = spyOn(logger, "error").mockImplementation(() => logger);
+        try {
+            const started = performance.now();
+            const response = await app.handle(new Request("http://localhost/health/ready"));
+
+            expect(performance.now() - started).toBeLessThan(1_000);
+            expect(response.status).toBe(503);
+            expect(await response.json()).toMatchObject({
+                error: { issues: [{ path: "queue", message: "timed out" }] },
+            });
+            expect(errorLog).toHaveBeenCalledWith("Readiness check timed out", {
+                check: "queue",
+                timeoutMs: 20,
+            });
+        } finally {
+            errorLog.mockRestore();
+        }
     });
 
     test("serves OpenAPI docs only when enabled", async () => {

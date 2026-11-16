@@ -44,7 +44,11 @@ errorHandler.registerShutdownHandler(async () => {
 });
 errorHandler.listenToErrorEvents();
 
-app.listen(config.SERVER_PORT);
+app.listen({
+    port: config.SERVER_PORT,
+    // Bun's default is 128 MiB; no route here takes more than a small JSON body.
+    maxRequestBodySize: config.MAX_REQUEST_BODY_BYTES ?? 1024 * 1024,
+});
 
 logger.info(`API listening on ${config.BASE_URL}`);
 logger.info(`Queue dashboard on ${config.BASE_URL}${QUEUE_DASHBOARD_PATH}`);

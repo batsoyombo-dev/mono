@@ -3,6 +3,46 @@ import eslintConfigPrettier from "eslint-config-prettier";
 import turboPlugin from "eslint-plugin-turbo";
 import tseslint from "typescript-eslint";
 
+const ENV_MESSAGE =
+    "Read env through @mono/env (`env.<group>` in packages, src/config.ts in apps). See rule 6 in AGENTS.md.";
+
+/**
+ * `no-restricted-syntax` entries that close the ways around `no-restricted-properties`
+ * (`process.env`, `Bun.env`). Exported so configs that set `no-restricted-syntax` themselves
+ * (entrypoints.js) keep them: a later config replaces a rule's options instead of merging.
+ */
+export const envAccessSyntax = [
+    // import { env } from "node:process" / "process"
+    {
+        selector:
+            "ImportDeclaration[source.value=/^(node:)?process$/] > ImportSpecifier[imported.name='env']",
+        message: ENV_MESSAGE,
+    },
+    // import * as proc from "node:process"; import proc from "process" (then proc.env)
+    {
+        selector:
+            "ImportDeclaration[source.value=/^(node:)?process$/] > :matches(ImportNamespaceSpecifier, ImportDefaultSpecifier[local.name!='process'])",
+        message: `Import \`process\` under its own name (or use the global) so env reads stay visible to lint. ${ENV_MESSAGE}`,
+    },
+    // import.meta.env
+    {
+        selector: "MemberExpression[object.type='MetaProperty'][property.name='env']",
+        message: ENV_MESSAGE,
+    },
+    // globalThis.process.env, global.process["env"], globalThis.Bun.env
+    {
+        selector:
+            "MemberExpression[object.type='MemberExpression'][object.object.name=/^(globalThis|global|self|window)$/][object.property.name=/^(process|Bun)$/]:matches([property.name='env'], [property.value='env'])",
+        message: ENV_MESSAGE,
+    },
+    // const { env } = globalThis.process
+    {
+        selector:
+            "VariableDeclarator[init.type='MemberExpression'][init.object.name=/^(globalThis|global|self|window)$/][init.property.name=/^(process|Bun)$/] > ObjectPattern > Property[key.name='env']",
+        message: ENV_MESSAGE,
+    },
+];
+
 /**
  * Shared ESLint configuration for every package.
  *
@@ -30,22 +70,14 @@ export const config = [
             // AGENTS.md rule 5: log through @mono/logger.
             "no-console": "error",
             // AGENTS.md rule 6: packages read `env.<group>` from @mono/env, apps their src/config.ts.
-            // @mono/env itself and Prisma's CLI config are the only exceptions (see their configs).
+            // @mono/env itself and Prisma's CLI config are the only exceptions (ENV_READERS in
+            // boundaries.js).
             "no-restricted-properties": [
                 "error",
-                {
-                    object: "process",
-                    property: "env",
-                    message:
-                        "Read env through @mono/env (`env.<group>` in packages, src/config.ts in apps). See rule 6 in AGENTS.md.",
-                },
-                {
-                    object: "Bun",
-                    property: "env",
-                    message:
-                        "Read env through @mono/env (`env.<group>` in packages, src/config.ts in apps). See rule 6 in AGENTS.md.",
-                },
+                { object: "process", property: "env", message: ENV_MESSAGE },
+                { object: "Bun", property: "env", message: ENV_MESSAGE },
             ],
+            "no-restricted-syntax": ["error", ...envAccessSyntax],
         },
     },
     // Type-aware rules for async correctness. An unhandled rejection crashes the process (see

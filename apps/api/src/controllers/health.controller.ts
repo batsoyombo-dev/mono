@@ -1,23 +1,45 @@
 import { Elysia } from "elysia";
 
+import type { ValidationIssue } from "@mono/error-handling";
+import { logger } from "@mono/logger";
+
 import { failure, success } from "../utils/response";
 
 /** Named dependency checks for readiness, e.g. `{ database: () => prisma.$queryRaw\`SELECT 1\` }`. */
 export type ReadinessChecks = Record<string, () => Promise<unknown>>;
 
-const CHECK_TIMEOUT_MS = 3_000;
+export type HealthControllerOptions = {
+    /** How long one check may take before it counts as failed. */
+    timeoutMs?: number;
+};
 
-async function runCheck(check: () => Promise<unknown>): Promise<string> {
+type CheckResult = "ok" | "failed" | "timed out";
+
+const DEFAULT_CHECK_TIMEOUT_MS = 3_000;
+const TIMED_OUT = Symbol("timed out");
+
+/** Runs one check. The error stays in the log; the response only says that it failed. */
+async function runCheck(
+    name: string,
+    check: () => Promise<unknown>,
+    timeoutMs: number
+): Promise<CheckResult> {
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error("timed out")), CHECK_TIMEOUT_MS);
+    const timeout = new Promise<typeof TIMED_OUT>((resolve) => {
+        timer = setTimeout(() => resolve(TIMED_OUT), timeoutMs);
     });
 
     try {
-        await Promise.race([check(), timeout]);
+        // A check that settles after the timeout is still handled by the race, so a late
+        // rejection is never unhandled.
+        if ((await Promise.race([check(), timeout])) === TIMED_OUT) {
+            logger.error("Readiness check timed out", { check: name, timeoutMs });
+            return "timed out";
+        }
         return "ok";
     } catch (error) {
-        return error instanceof Error ? error.message : "failed";
+        logger.error("Readiness check failed", { check: name, error });
+        return "failed";
     } finally {
         clearTimeout(timer);
     }
@@ -25,18 +47,29 @@ async function runCheck(check: () => Promise<unknown>): Promise<string> {
 
 /**
  * `GET /health`: liveness, the process is up (never touches dependencies).
- * `GET /health/ready`: readiness, every check passes (503 with per-check results otherwise).
+ * `GET /health/ready`: readiness, every check passes. Otherwise 503, with one issue per failing
+ * check (`{ path: "database", message: "failed" | "timed out" }`); the errors are logged.
  */
-export function createHealthController(checks: ReadinessChecks) {
+export function createHealthController(
+    checks: ReadinessChecks,
+    { timeoutMs = DEFAULT_CHECK_TIMEOUT_MS }: HealthControllerOptions = {}
+) {
     return new Elysia({ prefix: "/health", name: "Health", detail: { tags: ["health"] } })
         .get("/", () => success({ status: "ok" }))
         .get("/ready", async () => {
-            const names = Object.keys(checks);
-            const results = await Promise.all(names.map((name) => runCheck(checks[name]!)));
-            const report = Object.fromEntries(names.map((name, index) => [name, results[index]]));
+            const entries = Object.entries(checks);
+            const results = await Promise.all(
+                entries.map(([name, check]) => runCheck(name, check, timeoutMs))
+            );
+            const report = Object.fromEntries(
+                entries.map(([name], index) => [name, results[index]])
+            );
+            const issues: ValidationIssue[] = entries.flatMap(([name], index) =>
+                results[index] === "ok" ? [] : [{ path: name, message: results[index]! }]
+            );
 
-            return results.every((result) => result === "ok")
+            return issues.length === 0
                 ? success({ status: "ready", checks: report })
-                : failure(503, "Service not ready", report);
+                : failure(503, "Service not ready", issues);
         });
 }

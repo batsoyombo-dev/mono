@@ -1,3 +1,5 @@
+import type { MailTemplate } from "./templates";
+
 export type EmailOptions = {
     to: string;
     subject: string;
@@ -16,7 +18,7 @@ export type HtmlEmailOptions = EmailOptions & {
 
 export type TemplateEmailOptions = EmailOptions & {
     /** File name in ./templates without the .hbs extension. */
-    template: string;
+    template: MailTemplate;
     data: Record<string, unknown>;
 };
 

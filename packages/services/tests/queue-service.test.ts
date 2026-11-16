@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { Job, JobsOptions, Queue } from "bullmq";
+import { ErrorCode } from "bullmq";
 
 import {
     BadRequestError,
@@ -114,6 +115,22 @@ describe("queue service", () => {
         expect(added[0]?.opts?.jobId).toStartWith("manual-health-check-");
     });
 
+    test("gives every manual trigger a unique job id, even within one millisecond", async () => {
+        const { service, added } = setup();
+        const now = Date.now;
+        Date.now = () => 1_700_000_000_000;
+        try {
+            const trigger = () =>
+                service.triggerSchedule({ ...actor, queue: "default", scheduleId: "health-check" });
+            await Promise.all([trigger(), trigger()]);
+        } finally {
+            Date.now = now;
+        }
+
+        const [first, second] = added.map((job) => job.opts?.jobId);
+        expect(first).not.toBe(second);
+    });
+
     test("rejects an unknown schedule", async () => {
         const { service } = setup();
         await expect(
@@ -140,6 +157,22 @@ describe("queue service", () => {
                 opts: { delay: 1000, priority: undefined, jobId: "once" },
             },
         ]);
+    });
+
+    test("rejects integer job ids, which BullMQ refuses", async () => {
+        const { service, added } = setup();
+        for (const jobId of ["123", "-4"]) {
+            await expect(
+                service.enqueueJob({
+                    ...actor,
+                    queue: "default",
+                    name: "health",
+                    data: { pong: "x" },
+                    jobId,
+                })
+            ).rejects.toThrow();
+        }
+        expect(added).toEqual([]);
     });
 
     test("rejects a manual job with an invalid payload", async () => {
@@ -186,6 +219,33 @@ describe("queue service", () => {
         await expect(service.retryJob({ ...actor, queue: "default", jobId: "1" })).rejects.toThrow(
             ConflictError
         );
+    });
+
+    test("maps BullMQ's scheduler-owned and lock errors on remove to 409", async () => {
+        const scheduled = Object.assign(new Error("Job x belongs to a job scheduler"), {
+            code: ErrorCode.JobBelongsToJobScheduler,
+        });
+        const locked = new Error(
+            "Job 2 could not be removed because it is locked by another worker"
+        );
+        const crash = new Error("Connection is closed");
+        const failingRemove = (error: Error) =>
+            fakeJob({
+                state: "delayed",
+                remove: async () => {
+                    throw error;
+                },
+            });
+        const { service } = setup({
+            "1": failingRemove(scheduled),
+            "2": failingRemove(locked),
+            "3": failingRemove(crash),
+        });
+
+        const remove = (jobId: string) => service.removeJob({ ...actor, queue: "default", jobId });
+        await expect(remove("1")).rejects.toThrow(ConflictError);
+        await expect(remove("2")).rejects.toThrow(ConflictError);
+        await expect(remove("3")).rejects.toBe(crash);
     });
 
     test("only promotes delayed jobs", async () => {

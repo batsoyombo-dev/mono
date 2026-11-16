@@ -5,18 +5,19 @@
 import { afterAll, describe, expect, test } from "bun:test";
 
 import { defineEnv } from "@mono/env";
+import { Redis } from "ioredis";
 
-import { RedisCache } from "../src";
+import { LockError, RedisCache } from "../src";
 
 const config = defineEnv("integration-tests", { groups: ["redis"] });
-const cache = new RedisCache({
-    url: config.REDIS_URL,
-    prefix: `it-${crypto.randomUUID().slice(0, 8)}:`,
-});
+const prefix = `it-${crypto.randomUUID().slice(0, 8)}:`;
+const cache = new RedisCache({ url: config.REDIS_URL, prefix });
+const raw = new Redis(config.REDIS_URL, { lazyConnect: true });
 
 afterAll(async () => {
     await cache.flush();
     await cache.disconnect();
+    raw.disconnect();
 });
 
 describe("RedisCache (Redis)", () => {
@@ -48,7 +49,7 @@ describe("RedisCache (Redis)", () => {
         );
         await Bun.sleep(50);
 
-        await expect(cache.withLock("job", 5_000, async () => "second")).rejects.toThrow("LOCKED:");
+        await expect(cache.withLock("job", 5_000, async () => "second")).rejects.toThrow(LockError);
 
         release();
         expect(await held).toBe("first");
@@ -92,6 +93,18 @@ describe("RedisCache extras (Redis)", () => {
         const third = await hit();
         expect(third).toMatchObject({ allowed: false, count: 3 });
         expect(third.resetInMs).toBeGreaterThan(0);
+    });
+
+    test("a rate-limit counter without a TTL gets one on the next hit", async () => {
+        // A counter left without an expiry (e.g. PEXPIRE lost) must not block forever.
+        await raw.set(`${prefix}ratelimit:stuck`, "5");
+
+        const result = await cache.consumeRateLimit("stuck", { windowMs: 60_000, max: 10 });
+
+        expect(result.count).toBe(6);
+        const ttl = await raw.pttl(`${prefix}ratelimit:stuck`);
+        expect(ttl).toBeGreaterThan(0);
+        expect(ttl).toBeLessThanOrEqual(60_000);
     });
 
     test("ping succeeds against a live Redis", async () => {

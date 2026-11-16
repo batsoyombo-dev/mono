@@ -1,6 +1,7 @@
 import { ForbiddenError, NotFoundError } from "@mono/error-handling";
 
 import type { NoteRepository } from "../../repositories/note.repository";
+import type { ListFieldOptions } from "../../utils/filters";
 import { parseListRouteInput } from "../../utils/filters";
 import { createNoteSchema, listNotesSchema, noteIdSchema, updateNoteSchema } from "./schema";
 import type {
@@ -32,11 +33,16 @@ const noteSelect = {
     updatedAt: true,
 } as const;
 
-/** Fields callers may filter and sort by. Never list columns that must stay private. */
+/**
+ * Fields callers may filter (with each field's type) and sort by, and the order used when the
+ * request sends none. Never list columns that must stay private. `parseListRouteInput` appends
+ * `id desc` to every order so pages stay stable when sort values tie.
+ */
 const listFields = {
-    filterFields: ["title", "pinned", "createdAt", "updatedAt"],
+    filterFields: { title: "text", pinned: "boolean", createdAt: "date", updatedAt: "date" },
     sortFields: ["title", "pinned", "createdAt", "updatedAt"],
-} as const;
+    defaultSorts: [{ pinned: "desc" }, { createdAt: "desc" }],
+} satisfies ListFieldOptions;
 
 export type NoteServiceDeps = {
     notes: Pick<NoteRepository, "create" | "getManyWithPage" | "getOneById" | "update" | "delete">;
@@ -81,7 +87,7 @@ export function createNoteService({ notes }: NoteServiceDeps): NoteOperations {
                         : {},
                 ],
             },
-            orderBy: sorts.length ? sorts : [{ pinned: "desc" }, { createdAt: "desc" }],
+            orderBy: sorts,
             select: noteSelect,
         });
     }

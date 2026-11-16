@@ -1,4 +1,4 @@
-import type { ObjectCannedACL } from "@aws-sdk/client-s3";
+import type { ObjectCannedACL, S3ClientConfig } from "@aws-sdk/client-s3";
 import {
     DeleteObjectCommand,
     GetObjectCommand,
@@ -12,23 +12,39 @@ import { env } from "@mono/env";
 
 export type S3StorageConfigProps = {
     bucketName: string;
-    accessKeyId: string;
-    secretAccessKey: string;
     region: string;
+    /**
+     * Static credentials. Leave both unset to use the AWS SDK's default credential chain
+     * (environment, IAM role, ~/.aws); setting only one is an error.
+     */
+    accessKeyId?: string;
+    secretAccessKey?: string;
+    /** S3-compatible endpoint (MinIO, R2). Uses path-style URLs. Unset means AWS. */
+    endpoint?: string;
     visibility?: ObjectCannedACL;
 };
+
+/** The S3Client options for a storage config. Pure, so it can be unit tested. */
+export function s3ClientConfig(options: S3StorageConfigProps): S3ClientConfig {
+    const { region, accessKeyId, secretAccessKey, endpoint } = options;
+    if (Boolean(accessKeyId) !== Boolean(secretAccessKey)) {
+        throw new Error("Set both accessKeyId and secretAccessKey, or neither");
+    }
+
+    return {
+        region,
+        ...(accessKeyId && secretAccessKey
+            ? { credentials: { accessKeyId, secretAccessKey } }
+            : {}),
+        ...(endpoint ? { endpoint, forcePathStyle: true } : {}),
+    };
+}
 
 export class S3Storage {
     client: S3Client;
 
     constructor(private readonly options: S3StorageConfigProps) {
-        this.client = new S3Client({
-            region: this.options.region,
-            credentials: {
-                accessKeyId: this.options.accessKeyId,
-                secretAccessKey: this.options.secretAccessKey,
-            },
-        });
+        this.client = new S3Client(s3ClientConfig(options));
     }
 
     public put(path: string, file: Buffer) {
@@ -87,20 +103,25 @@ export class S3Storage {
     }
 }
 
-/** Returns S3 storage, or `null` when the app has not configured it (all fields optional). */
+/**
+ * Returns S3 storage, or `null` when no bucket is configured. Storage is on whenever
+ * `bucketName` is set; a bucket without a region is an error (`env.storage` checks the same).
+ */
 export function createStorage(
     options: Partial<S3StorageConfigProps> | undefined
 ): S3Storage | null {
-    const { accessKeyId, secretAccessKey, bucketName, region, visibility } = options ?? {};
-    if (!accessKeyId || !secretAccessKey || !bucketName || !region) return null;
+    const { bucketName, region, ...rest } = options ?? {};
+    if (!bucketName) return null;
+    if (!region) throw new Error("S3 storage needs a region when a bucket is set");
 
-    return new S3Storage({ accessKeyId, secretAccessKey, bucketName, region, visibility });
+    return new S3Storage({ bucketName, region, ...rest });
 }
 
-/** The app's S3 storage, or `null` when the `AWS_*` variables are not set. */
+/** The app's S3 storage, or `null` when `AWS_BUCKET_NAME` is not set. */
 export const storage: S3Storage | null = createStorage({
-    accessKeyId: env.storage.AWS_ACCESS_KEY,
-    secretAccessKey: env.storage.AWS_SECRET_KEY,
     bucketName: env.storage.AWS_BUCKET_NAME,
     region: env.storage.AWS_REGION,
+    accessKeyId: env.storage.AWS_ACCESS_KEY,
+    secretAccessKey: env.storage.AWS_SECRET_KEY,
+    endpoint: env.storage.AWS_ENDPOINT,
 });

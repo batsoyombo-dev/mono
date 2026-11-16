@@ -1,3 +1,5 @@
+import { monoPlugin } from "./plugin.js";
+
 /**
  * Package dependency rules: which `@mono/*` imports each workspace may use.
  * This map is the source of truth; AGENTS.md "Dependency rules" summarizes it.
@@ -5,6 +7,11 @@
  *
  * Entries are regular expressions matched against the whole import path after `@mono/`, so
  * `"env"` allows `@mono/env` but not `@mono/env/runtime`.
+ *
+ * Enforced by `mono/boundaries` (plugin.js) on static imports, `export ... from`, dynamic
+ * `import("...")` with a literal path and `require("...")`. The same rule rejects any relative
+ * import that resolves outside the importing file's workspace (`../../packages/database/src`,
+ * `../../../../database/generated/...`): other workspaces are reached only by their @mono name.
  */
 const ALLOWED = {
     env: [],
@@ -62,6 +69,8 @@ const SCOPED = {
             ],
             allowed: ["error-handling", "logger", "services/[^/]+/(schema|types)", "utils"],
             reason: "The request layer receives services and config through createApp(), so tests run without a database or .env.",
+            // Workspace-relative module ids (no extension; a directory means its index).
+            forbidden: ["src/config", "src/index", "src/admin", "src/seed", "src/seeds"],
         },
     ],
 };
@@ -72,12 +81,32 @@ function describe(allowed) {
         : "No @mono imports are allowed here.";
 }
 
-function restrict(allowed, message) {
-    const regex = allowed.length ? `^@mono/(?!(?:${allowed.join("|")})$)` : "^@mono/";
+function restrict(allowed, message, forbidden = [], forbiddenReason = "") {
     return {
-        "no-restricted-imports": ["error", { patterns: [{ regex, message }] }],
+        "mono/boundaries": [
+            "error",
+            {
+                allowed,
+                message,
+                forbidden: forbidden.map((id) => ({
+                    path: id,
+                    message: `${forbiddenReason} See "Dependency rules" in AGENTS.md.`,
+                })),
+            },
+        ],
     };
 }
+
+/**
+ * Files that may read the environment directly (AGENTS.md rule 6), keyed by workspace. The
+ * env-access rules from base.js are turned off for them.
+ */
+const ENV_READERS = {
+    env: ["src/**/*.ts"],
+    // Loaded by the Prisma CLI on its own, outside any app, so they read DATABASE_URL (and the
+    // db:check shadow database URL) directly.
+    database: ["prisma.config.ts", "scripts/db-check.ts"],
+};
 
 /**
  * @param {keyof typeof ALLOWED} workspace
@@ -92,14 +121,30 @@ export function boundaries(workspace) {
     return [
         {
             files: ["**/*.ts"],
+            plugins: { mono: monoPlugin },
             rules: restrict(allowed, `${describe(allowed)} See "Dependency rules" in AGENTS.md.`),
         },
-        ...(SCOPED[workspace] ?? []).map(({ allowed: scopedAllowed, reason, ...scope }) => ({
-            ...scope,
-            rules: restrict(
-                scopedAllowed,
-                `${describe(scopedAllowed)} ${reason} See "Dependency rules" in AGENTS.md.`
-            ),
-        })),
+        ...(SCOPED[workspace] ?? []).map(
+            ({ allowed: scopedAllowed, reason, forbidden, ...scope }) => ({
+                ...scope,
+                rules: restrict(
+                    scopedAllowed,
+                    `${describe(scopedAllowed)} ${reason} See "Dependency rules" in AGENTS.md.`,
+                    forbidden,
+                    `The request layer may not import the entry point, config, seeds or src/admin. ${reason}`
+                ),
+            })
+        ),
+        ...(ENV_READERS[workspace]
+            ? [
+                  {
+                      files: ENV_READERS[workspace],
+                      rules: {
+                          "no-restricted-properties": "off",
+                          "no-restricted-syntax": "off",
+                      },
+                  },
+              ]
+            : []),
     ];
 }

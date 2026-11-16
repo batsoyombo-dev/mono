@@ -9,11 +9,9 @@
             "Bash(bun run lint)",
             "Bash(bun run lint:fix)",
             "Bash(bun run test)",
-            "Bash(bun run test:integration)",
             "Bash(bun run build)",
             "Bash(bun run db:generate)",
             "Bash(bun run db:check)",
-            "Bash(bun run db:deploy)",
             "Bash(bun run infra:up)",
             "Bash(bun test *)",
             "Bash(bun test)",
@@ -32,6 +30,7 @@
             "Bash(git branch -a)",
             "Bash(git branch --list*)"
         ],
+        "ask": ["Bash(bun run test:integration)", "Bash(bun run db:deploy)"],
         "deny": [
             "Read(./.env)",
             "Read(./.env.local)",

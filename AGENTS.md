@@ -12,15 +12,15 @@ Reference implementations to copy:
 1. Business logic lives in `@mono/services` modules. Controllers only parse the request, resolve the session and call a service.
 2. Service modules never touch Prisma directly. They call repositories in `packages/services/src/repositories`.
 3. Services validate their own input with the module's zod schema (`schema.parse(payload)`), even when the controller already validated it. Workers and seeds call services too. A failed `parse` becomes a 422 automatically.
-4. Throw `AppError` subclasses from `@mono/error-handling` (`BadRequestError`, `UnauthorizedError`, `ForbiddenError`, `NotFoundError`, `ConflictError`, `ValidationError`, `InternalServerError`). Never build error responses by hand. Ownership checks (load, `NotFoundError` if missing, `ForbiddenError` if not the actor's) belong in the service. `toAppError` maps everything else at the edges: zod errors to 422, Prisma P2002 to 409, P2025 to 404, P2003 to 400, and anything unknown to a generic 500 whose message is logged, never sent.
+4. Throw `AppError` subclasses from `@mono/error-handling` (`BadRequestError`, `UnauthorizedError`, `ForbiddenError`, `NotFoundError`, `ConflictError`, `ValidationError`, `InternalServerError`). Never build error responses by hand. Ownership checks (load, `NotFoundError` if missing, `ForbiddenError` if not the actor's) belong in the service. `toAppError` maps everything else at the edges: zod errors to 422, Prisma P2002 to 409, P2025 to 404, P2003 to 400, Prisma query validation errors to a generic 400 (details logged), `LockError` from `@mono/cache` to 409, and anything unknown to a generic 500 whose message is logged, never sent.
 5. Log with `logger` from `@mono/logger` and a metadata object: `logger.error("Payment failed", { error, orderId })`. Never use `console` (ESLint `no-console`).
-6. Read environment only through `@mono/env`: packages use `env.<group>.<VAR>`, apps use their own `src/config.ts`. See "Configuration" below. Never read `process.env` or `Bun.env` anywhere else (ESLint `no-restricted-properties`; only `packages/env` and `packages/database/prisma.config.ts` are exempt).
-7. Respect the dependency rules below. They are enforced by ESLint. To allow a new edge, change `packages/eslint-config/boundaries.js` deliberately; never add `eslint-disable` for `no-restricted-imports`.
+6. Read environment only through `@mono/env`: packages use `env.<group>.<VAR>`, apps use their own `src/config.ts`. See "Configuration" below. Never read `process.env`, `Bun.env`, `import.meta.env`, `globalThis.process.env` or `env` imported from `node:process` anywhere else (ESLint; the only exemptions are `ENV_READERS` in `packages/eslint-config/boundaries.js`: `packages/env` and the database package's `prisma.config.ts` and `scripts/db-check.ts`).
+7. Respect the dependency rules below. They are enforced by the ESLint rule `mono/boundaries`, which checks static imports, re-exports, literal `import()` and `require()`, and rejects relative paths that leave the file's workspace. To allow a new edge, change `packages/eslint-config/boundaries.js` deliberately; never add `eslint-disable` for `mono/boundaries`.
 8. Never edit generated or vendored output: `packages/database/generated/`, `dist/`, `bun.lock` (let `bun install` write it).
-9. Every schema change ships with a migration (`bun run db:migrate -- --name <name>`). Never edit an applied migration. CI runs `bun run db:check`, which fails when `schema.prisma` and the migrations disagree.
-10. List endpoints go through `parseListRouteInput(input, { filterFields, sortFields })` from `@mono/services/filters` with explicit allowlists (both required). Filter ids are Prisma paths, so list only fields that are safe to expose; an open list would let callers query any column or relation.
-11. Never leave a promise floating: `await` it, return it, or mark a deliberate fire-and-forget with `void`. ESLint enforces this (`no-floating-promises`, `no-misused-promises`), because an unhandled rejection shuts the process down (`@mono/error-handling`).
-12. Import `@mono/services` by area, never from the package root (there is none): `@mono/services/<module>` (for example `/notes`, `/user`, `/auth`, `/queue`), `@mono/services/queues`, `/mail`, `/storage`, `/filters`, `/repositories`, `/lifecycle`. The API request layer may only import `@mono/services/<module>/schema` and `/types`.
+9. Every schema change ships with a migration (`bun run db:migrate -- --name <name>`). Never edit an applied migration. CI runs `bun run db:check`, which replays the migrations into a throwaway shadow database (created next to `DATABASE_URL`, or `SHADOW_DATABASE_URL`) and fails when the result differs from `schema.prisma`.
+10. List endpoints go through `parseListRouteInput(input, { filterFields, sortFields })` from `@mono/services/filters` with explicit allowlists (both required). `filterFields` maps each field to its type (`{ title: "text", pinned: "boolean", createdAt: "date" }`) and `sortFields` lists sortable fields. Filter ids are Prisma paths, so list only fields that are safe to expose; an open list would let callers query any column or relation. The server's type wins: a mismatched `type`, an operator the type doesn't support, or `blank` on a field not in `nullableFields` is a 422. Requests are bounded by `LIST_LIMITS` (20 filters, 100 `in` values, 200-character search, page ≤ 10000, pageSize ≤ 100; override with `limits`). Results always end with an `id desc` tiebreaker so pages are stable; set the default order with `defaultSorts`.
+11. Never leave a promise floating: `await` it, return it, or mark a deliberate fire-and-forget with `void`. ESLint enforces this (`no-floating-promises`, `no-misused-promises`), because a rejection nobody handles is logged as a crash (`@mono/error-handling`): an `uncaughtException` always shuts the process down with exit 1, and an `unhandledRejection` does when the error is not a known `AppError` (anything that maps to 500). Shutdown runs the registered handlers first, within `listenToErrorEvents({ shutdownTimeoutMs })` (10s default); a failed handler or a timeout exits 1.
+12. Import `@mono/services` by area, never from the package root (there is none): `@mono/services/<module>` (for example `/notes`, `/user`, `/auth`, `/queue`), `@mono/services/queues` (and `/queues/schema`: job schemas, names, schedules and `prepareJobData`; pure, safe in unit tests), `/mail`, `/storage`, `/filters`, `/repositories`, `/lifecycle`. The API request layer may only import `@mono/services/<module>/schema` and `/types`.
 
 ## Done means
 
@@ -30,13 +30,13 @@ bun run verify             # format check, check-types, lint (type-aware, zero w
 
 # When you touch the schema, repositories, queues or cache (needs `bun run infra:up`):
 bun run db:deploy          # apply migrations to the local database
-bun run db:check           # schema.prisma matches the migrations
+bun run db:check           # schema.prisma matches the migrations (needs CREATE DATABASE)
 bun run test:integration   # *.integration.test.ts against real PostgreSQL and Redis
 ```
 
 Add or update tests for behavior you change:
 
-- **Unit tests** (`*.test.ts`) pass fakes into factories (`create<Name>Service`, `createApp`, `createJobMap`, `createProcessor`) and need no database, Redis or `.env`. Keep them that way. `bun run test` runs with `--no-env-file`, so a test that accidentally loads a real instance fails locally exactly as it does in CI. Import factories from `service.ts`, never `handler.ts`, which builds the real instances. API tests build the app with `createTestApp(...)` from `apps/api/tests/helpers.ts`: every dependency is faked and any service a test did not fake rejects loudly.
+- **Unit tests** (`*.test.ts`) pass fakes into factories (`create<Name>Service`, `createApp`, `createJobMap`, `createProcessor`) and need no database, Redis or `.env`. Keep them that way. `bun run test` runs with `--no-env-file`, so a test that accidentally loads a real instance fails locally exactly as it does in CI. Logs default to `warn` under `NODE_ENV=test` (set by `bun test`) unless `LOG_LEVEL` is set. Import factories from `service.ts`, never `handler.ts`, which builds the real instances. API tests build the app with `createTestApp(...)` from `apps/api/tests/helpers.ts`: every dependency is faked and any service a test did not fake rejects loudly.
 - **Integration tests** (`*.integration.test.ts`, e.g. `packages/services/tests/integration/`) use real infrastructure. `bun run test` skips them; CI runs them in a separate job with fresh PostgreSQL and Redis. Use a unique prefix per run (emails, BullMQ `prefix`, cache `prefix`) and delete what you create in `afterAll`, so they are safe on a shared dev database.
 
 ## How a request flows
@@ -60,7 +60,7 @@ Every API response uses one envelope, built by `apps/api/src/utils/response.ts` 
 { "success": false, "status": 422, "error": { "message": "Validation failed", "issues": [{ "path": "title", "message": "..." }] } }
 ```
 
-Other endpoints: `GET /health` (liveness, no dependencies), `GET /health/ready` (database, cache and queue Redis; 503 with per-check results when one fails), and OpenAPI docs at `/openapi` (JSON at `/openapi/json`), generated from the route schemas and on by default outside production (`API_DOCS`).
+Other endpoints: `GET /health` (liveness, no dependencies), `GET /health/ready` (database, cache and queue Redis; 503 with one `error.issues` entry per failing check, `failed` or `timed out`; the cause is logged, never sent), and OpenAPI docs at `/openapi` (JSON at `/openapi/json`), generated from the route schemas and on by default outside production (`API_DOCS`).
 
 ## Dependency rules
 
@@ -80,7 +80,7 @@ Source of truth: `packages/eslint-config/boundaries.js`. Arrows point to what a 
 | `api` entry and seeds  | everything above                                                                           |
 | `api` request layer    | `error-handling`, `logger`, `utils`, `services/<module>/schema`, `services/<module>/types` |
 
-The API request layer is `src/app.ts`, `src/controllers`, `src/plugins`, `src/utils` and `tests`. Code that needs real infrastructure inside the API, such as the queue dashboard in `src/admin`, lives outside it and is passed to `createApp({ plugins })`. It receives real services and config through `createApp(...)` in `apps/api/src/index.ts`, which is why API tests run without a database or `.env`.
+The API request layer is `src/app.ts`, `src/controllers`, `src/plugins`, `src/utils` and `tests`. Code that needs real infrastructure inside the API, such as the queue dashboard in `src/admin`, lives outside it and is passed to `createApp({ plugins })`. It receives real services and config through `createApp(...)` in `apps/api/src/index.ts`, which is why API tests run without a database or `.env`. The request layer may not import `src/config`, `src/index`, `src/admin` or the seeds (enforced by `mono/boundaries`). Guard a mounted third-party app with `adminOnly(access, plugin)` from `src/plugins/admin-only.plugin.ts`: it checks matched routes, never the raw URL, which Elysia routes differently.
 
 Importing `@mono/env` never throws: each `env.<group>` is validated on first read. `@mono/env/runtime` (`NODE_ENV`, `LOG_LEVEL`, lenient, never throws) exists only for the logger.
 
@@ -89,7 +89,7 @@ Importing `@mono/env` never throws: each `env.<group>` is validated on first rea
 ### Feature module (CRUD resource)
 
 1. `packages/database/prisma/schema.prisma`: add the model, then `bun run db:migrate -- --name <name>` (needs `bun run infra:up`).
-2. `packages/services/src/repositories/<name>.repository.ts`: `class XRepository extends BaseRepository<PrismaClient["x"]>` whose constructor takes a `PrismaClient`, plus `export const xRepository = new XRepository(prisma)`. Re-export it from `repositories/index.ts`. Pass `{ softDelete: true }` when the model has a nullable `deletedAt`: reads, counts, updates and deletes then skip deleted rows (updating one throws P2025, a 404). `upsert` is not soft-delete aware.
+2. `packages/services/src/repositories/<name>.repository.ts`: `class XRepository extends BaseRepository<PrismaClient["x"]>` whose constructor takes a `PrismaClient`, plus `export const xRepository = new XRepository(prisma)`. Re-export it from `repositories/index.ts`. Pass `{ softDelete: true }` when the model has a nullable `deletedAt`: reads, counts, `aggregate`/`groupBy`, updates and deletes then skip deleted rows (updating or deleting one throws P2025, a 404). Relations are not filtered: an `include`/`select` of a relation and relation filters (`where: { notes: { some } }`) still see deleted rows, so add `deletedAt: null` inside the relation yourself. `upsert` is not soft-delete aware; `upsertById` treats a deleted row as missing and creates instead.
 3. `packages/services/src/modules/<name>/`:
     - `schema.ts`: zod input schemas.
     - `types.ts`: `z.infer` payloads, `*Input` types (payload + `actorUserId`), response types, and a `<Name>Operations` type listing the service functions.
@@ -103,10 +103,10 @@ Importing `@mono/env` never throws: each `env.<group>` is validated on first rea
 ### Background job
 
 1. Add a zod schema to `packages/services/src/queues/default/schemas.ts` and register it in `defaultQueueJobSchemas` (`queues/default/jobs.ts`). The payload type is derived from the schema.
-2. Add a handler in `apps/mq-worker/src/jobs/` (`JobDef<Payload>`, or `create<Name>Job(deps)` when it uses a client) and register it in `createJobMap` (`apps/mq-worker/src/job-map.ts`); pass real clients in `src/initialize.ts`. This is type-checked: every job name must have a handler. Use `job.log(...)` for lines that should appear in the dashboard's Logs tab.
-3. Enqueue with `defaultQueue.add("<job>", data)` (`@mono/services/queues`). `add` validates the payload and throws `ValidationError` before anything reaches Redis; the worker re-validates and fails bad payloads immediately with no retries (`UnrecoverableError`). Handlers receive the **parsed** payload (schema defaults and transforms applied).
+2. Add a handler in `apps/mq-worker/src/jobs/` (`JobDef<Payload>`, or `create<Name>Job(deps)` when it uses a client) and register it in `createJobMap` under its queue (`{ default: { <job>: handler } }` in `apps/mq-worker/src/job-map.ts`); pass real clients in `src/initialize.ts`. This is type-checked by `JobMap`: every job name must have a handler, and a handler for the wrong payload does not compile. Use `job.log(...)` for lines that should appear in the dashboard's Logs tab.
+3. Enqueue with `defaultQueue.add("<job>", data)` (`@mono/services/queues`). `add`/`addBulk` take the schema's input (`z.input`) and validate it after a JSON round-trip, throwing `ValidationError` before anything reaches Redis; use `z.coerce.date()`, not `z.date()`. Redis stores the input, not the parsed form, and the worker parses it once, failing bad payloads immediately with no retries (`UnrecoverableError`). Handlers receive the **parsed** payload (`z.output`, defaults and transforms applied exactly once). Schedule payloads are validated when the worker starts; an invalid one stops startup.
 
-Retries (`apps/mq-worker/src/processor.ts`): a handler error that maps to a 4xx (`ValidationError`, zod errors, `NotFoundError`, `ForbiddenError`, ...) fails the job without retrying; 409 `ConflictError` and anything else (network, SMTP, crashes) is retried. Defaults: 3 attempts with exponential backoff; completed jobs are kept 7 days (max 1000), failed jobs 30 days (max 5000). `WORKER_CONCURRENCY` sets parallel jobs per process; `WORKER_HEALTH_PORT` serves `GET /health` for liveness probes.
+Retries (`apps/mq-worker/src/processor.ts`): a handler error that maps to a 4xx (`ValidationError`, zod errors, `NotFoundError`, `ForbiddenError`, ...) fails the job without retrying, keeping the original error as `cause` with its stack; 408, 409 `ConflictError`, 429 and anything else (network, SMTP, crashes) are retried. Defaults: 3 attempts with exponential backoff; completed jobs are kept 7 days (max 1000), failed jobs 30 days (max 5000). `WORKER_CONCURRENCY` sets parallel jobs per process; `WORKER_HEALTH_PORT` serves `GET /health` for liveness probes; `WORKER_SHUTDOWN_TIMEOUT_MS` (default 25s) bounds how long active jobs get to finish on SIGTERM.
 
 New queue: add its name to `QueueNameSchema` (`queues/names.ts`), add its schemas to `queueJobSchemas` and `QueueMap` (`queues/jobs.ts`), add a `create<Name>Queue` factory, add it to `createQueues` (`queues/registry.ts`) and give it an entry in `schedules`. Each worker process runs one queue (`--queue <name>`).
 
@@ -132,7 +132,7 @@ Three ways to inspect and act on queues. All three call `queueService` (`package
     ```
 
 - **Admin HTTP API** under `/api/v1/admin/queues` (`apps/api/src/controllers/queue.controller.ts`): `GET /`, `GET /:queue/jobs?status=&page=&pageSize=`, `GET /:queue/jobs/:jobId`, `POST /:queue/jobs`, `POST /:queue/schedules/:scheduleId/trigger`, `POST /:queue/jobs/:jobId/retry|promote`, `DELETE /:queue/jobs/:jobId`, `POST /:queue/retry-failed|pause|resume|clean`.
-- **Dashboard** (Bull Board) at `/admin/queues`: recent jobs by status with payload, logs, errors, retry and clean. Mounted in `apps/api/src/admin/queue-dashboard.ts`; the UI itself comes from `@bull-board/ui`, so there is no frontend code to maintain.
+- **Dashboard** (Bull Board) at `/admin/queues`: recent jobs by status with payload, logs, errors, retry and clean. Mounted in `apps/api/src/admin/queue-dashboard.ts` behind `adminOnly`; the UI itself comes from `@bull-board/ui`, so there is no frontend code to maintain.
 
 The API and dashboard need a Better Auth session cookie for a verified user whose email is in `ADMIN_EMAILS` (comma-separated; `.env.example` makes `demo@example.com` an admin). No session gives 401, a non-admin gives 403. To use the dashboard locally, sign in from the API origin first, for example by running `fetch("/api/v1/auth/sign-in/email", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "demo@example.com", password: "password123" }) })` in the browser console on `http://localhost:3000/health`.
 
@@ -155,12 +155,15 @@ export const config = defineEnv("api", { extend: { SERVER_PORT: port.default(300
     - When only one app reads it (`SERVER_PORT`, `ADMIN_EMAILS`), put it in that app's `extend` and in `.env.example`.
 - **Entry points** (`src/index.ts`, `src/seed.ts`, `src/cli.ts`) import `./config` **first** (enforced by `configFirst` in `packages/eslint-config/entrypoints.js`; add new entry points to the app's `eslint.config.js`), so a bad `.env` fails before any package loads and lists every problem at once. `defineEnv` validates all groups by default; pass `groups: [...]` for an app that needs fewer.
 - **Helpers:** `optional(...)` for integrations an empty value disables, `commaSeparated(item)` for lists, `port` for ports.
+- **Cross-variable checks** go in `envGroupRules` (`groups.ts`) and run whenever that group is validated. Examples: the `.env.example` `BETTER_AUTH_SECRET` is refused when `NODE_ENV` is `staging` or `production`; the storage variables must be set together.
+- **Storage** is on when `AWS_BUCKET_NAME` is set (with `AWS_REGION`). Leave `AWS_ACCESS_KEY`/`AWS_SECRET_KEY` empty to use the AWS default credential chain, and set `AWS_ENDPOINT` for S3-compatible stores (path-style).
 
 ### Cache and locks
 
 `cache` from `@mono/cache` (ioredis; `new RedisCache({ url, prefix })` for another instance, `cache.namespace("x:")` for a prefixed view on the same connection): `get`, `set`, `remember(key, ttlMs, fetcher)`, `forget`, `withLock(key, ttlMs, fn)`, `consumeRateLimit(key, { windowMs, max })`, `ping`. Build keys with `ck("users", { page }, "v1")`.
 
-- Values round-trip with `Date` and `BigInt` intact, so cached Prisma rows keep their types.
+- Values round-trip with `Date`, `BigInt`, `Uint8Array` and `Buffer` intact, so cached Prisma rows keep their types, except `Decimal`, which comes back as its exact string.
+- `withLock` throws `LockError` (a 409 at the edges) when the lock is held. The lock is not extended: if `fn` outlives `ttlMs`, another holder can enter.
 - `remember` shares one fetch between concurrent misses in a process; `null`/`undefined` results are not cached. Across processes, wrap the fetch in `withLock` if a stampede matters.
 - The cache uses `CACHE_REDIS_URL` when set (a Redis that may evict), otherwise `REDIS_URL`. BullMQ always uses `REDIS_URL`, which must run `maxmemory-policy noeviction` (docker-compose sets it); an evicting Redis silently drops jobs.
 
@@ -169,15 +172,18 @@ export const config = defineEnv("api", { extend: { SERVER_PORT: port.default(300
 Better Auth is mounted at `/api/v1/auth/*` (email/password with email verification; Google when `GOOGLE_CLIENT_*` are set). For another isolated surface, such as an admin panel with sign-up disabled, call `createAuth({ basePath, cookiePrefix, disableSignUp })` again and mount it under its own prefix.
 
 - Sessions are cached in a signed cookie for 5 minutes (`session.cookieCache`), so most requests skip the sessions query. A revoked session keeps working for up to 5 minutes; lower `maxAge` if that matters.
-- Rate limiting (on in production) counts in Redis through `cache.consumeRateLimit`, so the limit holds across API instances. Behind a proxy, make sure it sets `X-Forwarded-For`.
+- Rate limiting (on in production) counts in Redis through `cache.consumeRateLimit`, so the limit holds across API instances. The counters use the cache Redis (`CACHE_REDIS_URL` when set). Behind a load balancer or ingress, list its addresses or CIDRs in `TRUSTED_PROXIES`; otherwise requests with a multi-hop `X-Forwarded-For` have no client IP and share one bucket.
 
 ### Email
 
-Use `mailClient` from `@mono/services/mail`; outside the worker, prefer queueing a `mail` job. Templates are Handlebars files in `packages/services/src/clients/mail/templates`. Locally, mail lands in Mailpit at http://localhost:8025.
+Use `mailClient` from `@mono/services/mail`; outside the worker, prefer queueing a `mail` job. Templates are Handlebars files in `packages/services/src/clients/mail/templates`; a job's `template` must be one of `MAIL_TEMPLATES` (`clients/mail/templates.ts`), so add the name there with each new `.hbs` file (a test checks the two match). Locally, mail lands in Mailpit at http://localhost:8025.
+
+- Set `redact` on mail jobs that carry live credentials (`redact: ["resetUrl"]`): the worker replaces those `data` keys with `"[redacted]"` once the job has finished (sent, or failed for good), so admins never see working links in the dashboard. A redacted job cannot be re-run.
+- `MAIL_ENCRYPTION`: `ssl` (implicit TLS), `starttls` (required), `none`/`false`, or `true`/`tls` (default: `ssl` on port 465, else required STARTTLS). SMTP has 10s connect, 10s greeting and 20s socket timeouts.
 
 ## Environment
 
-- Local infrastructure: `bun run infra:up` (PostgreSQL 18, Redis 8, Mailpit). Apps run on the host: `bun run dev`. If `localhost:5432` or `:6379` reaches a different PostgreSQL or Redis already running on the machine (for example from Homebrew), connections fail with errors like `role "postgres" does not exist` or `P1010: User was denied access`. Set `POSTGRES_PORT` / `REDIS_PORT` (and `MAILPIT_*_PORT`) in `.env` to free ports, use the same ports in `DATABASE_URL` / `REDIS_URL` / `MAIL_PORT`, and run `bun run infra:up` again.
+- Local infrastructure: `bun run infra:up` (PostgreSQL 18, Redis 8, Mailpit; waits until all three are healthy). Apps run on the host: `bun run dev`. If `localhost:5432` or `:6379` reaches a different PostgreSQL or Redis already running on the machine (for example from Homebrew), connections fail with errors like `role "postgres" does not exist` or `P1010: User was denied access`. Set `POSTGRES_PORT` / `REDIS_PORT` (and `MAILPIT_*_PORT`) in `.env` to free ports, use the same ports in `DATABASE_URL` / `REDIS_URL` / `MAIL_PORT`, and run `bun run infra:up` again.
 - All apps read the root `.env` (copy `.env.example`). `bun run seed` creates `demo@example.com` / `password123` and refuses to run with `NODE_ENV=production` (override with `--allow-production`).
 - Every API response carries `x-request-id`; send one to correlate with an upstream service. Errors logged by the API include it.
 - Turbo runs `prisma generate` before `check-types`, `lint`, `build` and `dev`. Run `bun run db:generate` yourself only when calling `tsc` directly.

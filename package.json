@@ -22,7 +22,7 @@
         "start:api": "bun run --cwd apps/api start",
         "start:mq-worker": "bun run --cwd apps/mq-worker start",
         "queue": "bun run --cwd apps/mq-worker queue",
-        "infra:up": "docker compose up -d",
+        "infra:up": "docker compose up -d --wait",
         "infra:down": "docker compose down",
         "db:generate": "turbo run db:generate",
         "db:migrate": "bun run --cwd packages/database db:migrate",

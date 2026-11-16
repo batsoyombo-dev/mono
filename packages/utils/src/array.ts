@@ -6,12 +6,16 @@ export function unique<T>(arr: T[]): T[] {
 }
 
 /**
- * Splits an array into chunks of the given size.
+ * Splits an array into chunks of the given size. `size` is floored and must be at least 1.
  */
 export function chunk<T>(arr: T[], size: number): T[][] {
+    const step = Math.floor(size);
+    if (!(step >= 1) || !Number.isFinite(step)) {
+        throw new RangeError(`chunk size must be a positive integer, got ${size}`);
+    }
     const result: T[][] = [];
-    for (let i = 0; i < arr.length; i += size) {
-        result.push(arr.slice(i, i + size));
+    for (let i = 0; i < arr.length; i += step) {
+        result.push(arr.slice(i, i + step));
     }
     return result;
 }

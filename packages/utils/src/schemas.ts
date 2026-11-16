@@ -39,7 +39,8 @@ export const singleFilterSchema = z.object({
     id: z.string().trim().min(1),
     operator: filterOperatorSchema,
     value: filterValueSchema,
-    type: filterTypeSchema,
+    /** Optional hint; the server's field type wins and a mismatch is rejected. */
+    type: filterTypeSchema.optional(),
 });
 
 export const filterSchema = z.array(singleFilterSchema);

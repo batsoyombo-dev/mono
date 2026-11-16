@@ -1,4 +1,5 @@
 import type { Job, JobsOptions, Queue } from "bullmq";
+import { ErrorCode } from "bullmq";
 
 import { ConflictError, NotFoundError } from "@mono/error-handling";
 import { logger } from "@mono/logger";
@@ -24,6 +25,29 @@ export type QueueServiceDeps = {
 };
 
 const STATUSES = jobStatusSchema.options;
+
+const LOCK_ERROR_CODES: ReadonlySet<unknown> = new Set([
+    ErrorCode.JobLockNotExist,
+    ErrorCode.JobLockMismatch,
+]);
+
+/**
+ * BullMQ errors from `job.remove()` that mean "not now" rather than a server fault: the job is
+ * the next run of a job scheduler, or another worker holds its lock. Becomes a 409.
+ */
+function toRemoveConflict(error: unknown): ConflictError | null {
+    if (!(error instanceof Error)) return null;
+    const code = (error as Error & { code?: unknown }).code;
+    if (code === ErrorCode.JobBelongsToJobScheduler) {
+        return new ConflictError(
+            "This job is the next run of a job scheduler; remove or change the schedule instead"
+        );
+    }
+    if (LOCK_ERROR_CODES.has(code) || /locked by another worker/i.test(error.message)) {
+        return new ConflictError("The job is locked by a worker; try again when it finishes");
+    }
+    return null;
+}
 
 const toIso = (ms?: number | null) => (ms ? new Date(ms).toISOString() : null);
 
@@ -151,7 +175,8 @@ export function createQueueService({ queues, schedules }: QueueServiceDeps): Que
 
             const jobName = String(schedule.job.name);
             const job = await getQueue(name).enqueue(jobName, schedule.job.data, {
-                jobId: `manual-${scheduleId}-${Date.now()}`,
+                // Random, so two triggers in the same millisecond never dedupe into one job.
+                jobId: `manual-${scheduleId}-${crypto.randomUUID()}`,
             });
 
             audit("trigger-schedule", { queue: name, scheduleId, jobId: job.id, actorUserId });
@@ -190,7 +215,11 @@ export function createQueueService({ queues, schedules }: QueueServiceDeps): Que
                 throw new ConflictError("Active jobs cannot be removed");
             }
 
-            await job.remove();
+            try {
+                await job.remove();
+            } catch (error) {
+                throw toRemoveConflict(error) ?? error;
+            }
             audit("remove", { queue: name, jobId, actorUserId });
             return { id: jobId };
         },

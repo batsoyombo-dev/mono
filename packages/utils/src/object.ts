@@ -118,7 +118,8 @@ export function isObject(item: any): item is AnyObject {
 
 /**
  * Deeply checks two values for equality.
- * Supports: primitives, Date, RegExp, Array, Object, Map, Set.
+ * Supports: primitives, Date, RegExp, Array, Object, Map, Set. Objects only match objects with
+ * the same prototype, so `[]`, `{}`, `new Map()` and `new Date(0)` are all different.
  */
 export function isEqual(a: any, b: any): boolean {
     // Strict equality or both NaN
@@ -137,6 +138,11 @@ export function isEqual(a: any, b: any): boolean {
 
     // If both are objects (including arrays, maps, sets)
     if (a && b && typeof a === "object" && typeof b === "object") {
+        // Different kinds never match: [] vs {}, a Date or Map vs {}, class instances of
+        // different classes.
+        if (Object.getPrototypeOf(a) !== Object.getPrototypeOf(b)) return false;
+        if (Object.prototype.toString.call(a) !== Object.prototype.toString.call(b)) return false;
+
         // Arrays
         if (Array.isArray(a) && Array.isArray(b)) {
             if (a.length !== b.length) return false;

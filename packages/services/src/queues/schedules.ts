@@ -1,4 +1,4 @@
-import type { JobData, QueueJobNames } from "./jobs";
+import type { JobInputData, QueueJobNames } from "./jobs";
 import type { Queues } from "./names";
 
 export type Schedule<TQueue extends Queues, TJob extends QueueJobNames<TQueue>> = {
@@ -7,7 +7,8 @@ export type Schedule<TQueue extends Queues, TJob extends QueueJobNames<TQueue>> 
     /** Cron pattern, evaluated in `timezone` (UTC by default). */
     pattern: string;
     timezone?: string;
-    job: { name: TJob; data: JobData<TQueue, TJob> };
+    /** Stored as is and parsed by the worker on every run (the worker validates it on start). */
+    job: { name: TJob; data: JobInputData<TQueue, TJob> };
 };
 
 /**
