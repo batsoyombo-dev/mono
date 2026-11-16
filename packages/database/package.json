@@ -12,6 +12,7 @@
         "db:generate": "prisma generate",
         "db:migrate": "bun --env-file=../../.env prisma migrate dev",
         "db:deploy": "bun --env-file=../../.env prisma migrate deploy",
+        "db:check": "bun --env-file=../../.env prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --exit-code",
         "db:studio": "bun --env-file=../../.env prisma studio"
     },
     "dependencies": {

@@ -32,7 +32,8 @@ export class TypedQueue<S extends JobSchemas> {
         return this.enqueue(name, data, opts);
     }
 
-    addBulk<K extends keyof S & string>(
+    // async so a validation error is a rejected promise, never a synchronous throw.
+    async addBulk<K extends keyof S & string>(
         jobs: { name: K; data: InferJobs<S>[K]; opts?: JobsOptions }[]
     ) {
         return this.queue.addBulk(
@@ -44,7 +45,7 @@ export class TypedQueue<S extends JobSchemas> {
     }
 
     /** Untyped entry point for dynamic input (admin API, CLI). Still validated at runtime. */
-    enqueue(name: string, data: unknown, opts?: JobsOptions): Promise<Job> {
+    async enqueue(name: string, data: unknown, opts?: JobsOptions): Promise<Job> {
         return this.queue.add(name, parseJobData(this.name, this.schemas, name, data), opts);
     }
 

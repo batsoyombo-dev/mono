@@ -19,3 +19,44 @@ jobs:
             - run: bun run lint
             - run: bun run test
             - run: bun run build
+
+    # Real PostgreSQL and Redis: migrations apply cleanly, schema.prisma matches them,
+    # and the integration tests (*.integration.test.ts) pass. The verify job stays env-free.
+    integration:
+        runs-on: ubuntu-latest
+        services:
+            postgres:
+                image: postgres:18-alpine
+                env:
+                    POSTGRES_USER: postgres
+                    POSTGRES_PASSWORD: postgres
+                    POSTGRES_DB: mono
+                ports:
+                    - 5432:5432
+                options: >-
+                    --health-cmd "pg_isready -U postgres"
+                    --health-interval 5s
+                    --health-timeout 5s
+                    --health-retries 10
+            redis:
+                image: redis:8-alpine
+                ports:
+                    - 6379:6379
+                options: >-
+                    --health-cmd "redis-cli ping"
+                    --health-interval 5s
+                    --health-timeout 5s
+                    --health-retries 10
+        env:
+            DATABASE_URL: postgresql://postgres:postgres@localhost:5432/mono
+            REDIS_URL: redis://localhost:6379
+        steps:
+            - uses: actions/checkout@v7
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: 1.4.4
+            - run: bun install --frozen-lockfile
+            - run: bun run db:generate
+            - run: bun run db:deploy
+            - run: bun run db:check
+            - run: bun run test:integration

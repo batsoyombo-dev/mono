@@ -105,7 +105,8 @@ export abstract class BaseRepository<T> {
             this.getModel(transaction).findMany({
                 ...(args ?? {}),
                 where,
-                skip: pagination.skip,
+                // Callers may pass { page, pageSize } without running parsePagination first.
+                skip: pagination.skip ?? (pagination.page - 1) * pagination.pageSize,
                 take: pagination.pageSize,
             }),
             this.getModel(transaction).count({

@@ -27,6 +27,25 @@ export const config = [
             "no-unused-vars": "off",
             "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
             "@typescript-eslint/consistent-type-imports": ["warn", { prefer: "type-imports" }],
+            // AGENTS.md rule 5: log through @mono/logger.
+            "no-console": "error",
+            // AGENTS.md rule 6: packages read `env.<group>` from @mono/env, apps their src/config.ts.
+            // @mono/env itself and Prisma's CLI config are the only exceptions (see their configs).
+            "no-restricted-properties": [
+                "error",
+                {
+                    object: "process",
+                    property: "env",
+                    message:
+                        "Read env through @mono/env (`env.<group>` in packages, src/config.ts in apps). See rule 6 in AGENTS.md.",
+                },
+                {
+                    object: "Bun",
+                    property: "env",
+                    message:
+                        "Read env through @mono/env (`env.<group>` in packages, src/config.ts in apps). See rule 6 in AGENTS.md.",
+                },
+            ],
         },
     },
     {

@@ -10,20 +10,28 @@ Reference implementations to copy: `packages/services/src/modules/user`, `packag
 2. Service modules never touch Prisma directly. They call repositories in `packages/services/src/repositories`.
 3. Services validate their own input with the module's zod schema (`schema.parse(payload)`), even when the controller already validated it. Workers and seeds call services too.
 4. Throw `AppError` subclasses from `@mono/error-handling` (`BadRequestError`, `UnauthorizedError`, `ForbiddenError`, `NotFoundError`, `ConflictError`, `ValidationError`, `InternalServerError`). Never build error responses by hand. Ownership checks (`ForbiddenError`) belong in the service handler.
-5. Log with `logger` from `@mono/logger` and a metadata object: `logger.error("Payment failed", { error, orderId })`. Never use `console`.
-6. Read environment only through `@mono/env`: packages use `env.<group>.<VAR>`, apps use their own `src/config.ts`. See "Configuration" below. Never read `process.env` anywhere else.
+5. Log with `logger` from `@mono/logger` and a metadata object: `logger.error("Payment failed", { error, orderId })`. Never use `console` (ESLint `no-console`).
+6. Read environment only through `@mono/env`: packages use `env.<group>.<VAR>`, apps use their own `src/config.ts`. See "Configuration" below. Never read `process.env` or `Bun.env` anywhere else (ESLint `no-restricted-properties`; only `packages/env` and `packages/database/prisma.config.ts` are exempt).
 7. Respect the dependency rules below. They are enforced by ESLint. To allow a new edge, change `packages/eslint-config/boundaries.js` deliberately; never add `eslint-disable` for `no-restricted-imports`.
 8. Never edit generated or vendored output: `packages/database/generated/`, `dist/`, `bun.lock` (let `bun install` write it).
-9. Every schema change ships with a migration (`bun run db:migrate -- --name <name>`). Never edit an applied migration.
+9. Every schema change ships with a migration (`bun run db:migrate -- --name <name>`). Never edit an applied migration. CI runs `bun run db:check`, which fails when `schema.prisma` and the migrations disagree.
 
 ## Done means
 
 ```sh
 bun run format:fix
-bun run verify      # format check, check-types, lint, test (CI also runs build)
+bun run verify             # format check, check-types, lint, unit tests (CI also runs build)
+
+# When you touch the schema, repositories, queues or cache (needs `bun run infra:up`):
+bun run db:deploy          # apply migrations to the local database
+bun run db:check           # schema.prisma matches the migrations
+bun run test:integration   # *.integration.test.ts against real PostgreSQL and Redis
 ```
 
-Add or update tests for behavior you change. Tests pass fakes into factories (`create<Name>Service`, `createApp`) and need no database, Redis or `.env`. Keep them that way.
+Add or update tests for behavior you change:
+
+- **Unit tests** (`*.test.ts`) pass fakes into factories (`create<Name>Service`, `createApp`, `createJobMap`) and need no database, Redis or `.env`. Keep them that way. Import factories from `service.ts`, never `handler.ts`, which builds the real instances.
+- **Integration tests** (`*.integration.test.ts`, e.g. `packages/services/tests/integration/`) use real infrastructure. `bun run test` skips them; CI runs them in a separate job with fresh PostgreSQL and Redis. Use a unique prefix per run (emails, BullMQ `prefix`, cache `prefix`) and delete what you create in `afterAll`, so they are safe on a shared dev database.
 
 ## How a request flows
 
@@ -136,7 +144,7 @@ export const config = defineEnv("api", { extend: { SERVER_PORT: port.default(300
 - **Adding a variable:**
     - When a package reads it, add it to the right group in `groups.ts` (or add a new group) and to `.env.example`. The types of `env.<group>` and of each app's `config` follow.
     - When only one app reads it (`SERVER_PORT`, `ADMIN_EMAILS`), put it in that app's `extend` and in `.env.example`.
-- **Entry points** (`src/index.ts`, `src/seed.ts`, `src/cli.ts`) import `./config` **first**, so a bad `.env` fails before any package loads and lists every problem at once. `defineEnv` validates all groups by default; pass `groups: [...]` for an app that needs fewer.
+- **Entry points** (`src/index.ts`, `src/seed.ts`, `src/cli.ts`) import `./config` **first** (enforced by `configFirst` in `packages/eslint-config/entrypoints.js`; add new entry points to the app's `eslint.config.js`), so a bad `.env` fails before any package loads and lists every problem at once. `defineEnv` validates all groups by default; pass `groups: [...]` for an app that needs fewer.
 - **Helpers:** `optional(...)` for integrations an empty value disables, `commaSeparated(item)` for lists, `port` for ports.
 
 ### Cache and locks
@@ -153,10 +161,11 @@ Use `mailClient` from `@mono/services`; outside the worker, prefer queueing a `m
 
 ## Environment
 
-- Local infrastructure: `bun run infra:up` (PostgreSQL 18, Redis 8, Mailpit). Apps run on the host: `bun run dev`.
+- Local infrastructure: `bun run infra:up` (PostgreSQL 18, Redis 8, Mailpit). Apps run on the host: `bun run dev`. If `localhost:5432` or `:6379` reaches a different PostgreSQL or Redis already running on the machine (for example from Homebrew), connections fail with errors like `role "postgres" does not exist`: stop that service or point `.env` at the containers.
 - All apps read the root `.env` (copy `.env.example`). `bun run seed` creates `demo@example.com` / `password123`.
 - Turbo runs `prisma generate` before `check-types`, `lint`, `build` and `dev`. Run `bun run db:generate` yourself only when calling `tsc` directly.
 - Bun is pinned in `package.json` (`packageManager`). Use `bun`, never `npm`, `yarn` or `pnpm`.
+- `.claude/settings.json` pre-approves the routine commands above (verify, tests, lint, read-only git) for Claude Code and blocks reading `.env`.
 
 <!-- BEGIN:turborepo-agent-rules -->
 

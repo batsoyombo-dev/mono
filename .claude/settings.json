@@ -1,0 +1,35 @@
+{
+    "$schema": "https://json.schemastore.org/claude-code-settings.json",
+    "permissions": {
+        "allow": [
+            "Bash(bun run verify)",
+            "Bash(bun run format)",
+            "Bash(bun run format:fix)",
+            "Bash(bun run check-types)",
+            "Bash(bun run lint)",
+            "Bash(bun run lint:fix)",
+            "Bash(bun run test)",
+            "Bash(bun run test:integration)",
+            "Bash(bun run build)",
+            "Bash(bun run db:generate)",
+            "Bash(bun run db:check)",
+            "Bash(bun test *)",
+            "Bash(bun test)",
+            "Bash(bun install)",
+            "Bash(bunx eslint *)",
+            "Bash(bunx tsc --noEmit*)",
+            "Bash(bun run queue help)",
+            "Bash(bun run queue stats*)",
+            "Bash(bun run queue jobs *)",
+            "Bash(bun run queue job *)",
+            "Bash(git status*)",
+            "Bash(git diff*)",
+            "Bash(git log*)",
+            "Bash(git show*)",
+            "Bash(git branch --show-current)",
+            "Bash(git branch -a)",
+            "Bash(git branch --list*)"
+        ],
+        "deny": ["Read(./.env)"]
+    }
+}
