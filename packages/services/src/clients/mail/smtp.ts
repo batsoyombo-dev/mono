@@ -1,6 +1,6 @@
 /** SMTP connection settings shared by the mail client. Pure: safe to import in tests. */
 
-export type MailEncryption = "auto" | "ssl" | "starttls" | "none";
+export type MailEncryption = "auto" | "ssl" | "starttls" | "opportunistic" | "none";
 
 export type SmtpTimeouts = {
     /** Waiting for the TCP connection. */
@@ -12,16 +12,20 @@ export type SmtpTimeouts = {
 };
 
 /**
- * Short enough that a hung SMTP server fails the send (and the job is retried) well inside the
- * worker's shutdown grace (`WORKER_SHUTDOWN_TIMEOUT_MS`, 25s by default).
+ * Even back to back (5s + 5s + 10s = 20s), a hung SMTP server fails the send (and the job is
+ * retried) inside the worker's shutdown grace (`WORKER_SHUTDOWN_TIMEOUT_MS`, 25s by default),
+ * so a send is never cut off mid-way and re-run, which could deliver the email twice.
  */
 export const DEFAULT_SMTP_TIMEOUTS: SmtpTimeouts = {
-    connection: 10_000,
-    greeting: 10_000,
-    socket: 20_000,
+    connection: 5_000,
+    greeting: 5_000,
+    socket: 10_000,
 };
 
-/** Nodemailer TLS flags for an encryption mode. */
+/**
+ * Nodemailer TLS flags for an encryption mode. `opportunistic` upgrades with STARTTLS when the
+ * server offers it (nodemailer's default); `none` never uses TLS.
+ */
 export function tlsOptions(encryption: MailEncryption, port: number) {
     const mode = encryption === "auto" ? (port === 465 ? "ssl" : "starttls") : encryption;
     return {

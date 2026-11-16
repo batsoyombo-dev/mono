@@ -73,6 +73,11 @@ describe("SMTP encryption", () => {
             requireTLS: false,
             ignoreTLS: true,
         });
+        expect(tlsOptions("opportunistic", 587)).toEqual({
+            secure: false,
+            requireTLS: false,
+            ignoreTLS: false,
+        });
         expect(tlsOptions("auto", 465)).toEqual({
             secure: true,
             requireTLS: false,

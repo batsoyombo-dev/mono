@@ -313,7 +313,9 @@ export abstract class BaseRepository<T> {
         transaction?: Tx
     ): Promise<Prisma.Result<T, A, "deleteMany">> {
         if (this.softDelete) {
+            // Spread `args` so options such as `limit` still apply to the soft delete.
             return this.getModel(transaction).updateMany({
+                ...args,
                 where: this.withSoftDelete(args.where),
                 data: {
                     deletedAt: new Date(),

@@ -16,10 +16,33 @@ const safeStringify = (value: unknown): string => stringify(value, bigintToStrin
 const MAX_ERROR_DEPTH = 5;
 
 /**
+ * Error fields copied into logs besides name, message, stack and cause. An allowlist, because
+ * libraries hang secrets on errors: ioredis puts the failed command (`AUTH <password>`) on
+ * `err.command`, HTTP clients put request configs with auth headers on theirs.
+ */
+const ERROR_FIELDS = [
+    "code",
+    "status",
+    "statusCode",
+    "errno",
+    "syscall",
+    "isTrusted",
+    "issues",
+    "meta",
+    "clientVersion",
+] as const;
+
+/** Metadata keys whose values are never logged, at any depth. */
+const SECRET_KEY = /pass(word|wd)?$|secret|token|authorization|cookie|api[-_]?key|credential/i;
+export const REDACTED = "[redacted]";
+
+/**
  * Turns `Error`s anywhere in a log metadata value into plain objects (`name`, `message`, `stack`,
- * `cause` and own enumerable fields such as `status`, `code` or `issues`), because
- * `JSON.stringify` drops an Error's message and stack. Recurses into arrays and plain objects;
- * cycles are left for the stringifier to mark as `[Circular]`. BigInts become strings.
+ * `cause` and the allowlisted `ERROR_FIELDS` such as `status`, `code` or `issues`), because
+ * `JSON.stringify` drops an Error's message and stack. Recurses into arrays and plain objects,
+ * replacing values under secret-looking keys (`password`, `token`, `authorization`, ...) with
+ * `[redacted]`; cycles are left for the stringifier to mark as `[Circular]`. BigInts become
+ * strings.
  */
 export function serializeMetaValue(
     value: unknown,
@@ -33,8 +56,11 @@ export function serializeMetaValue(
     if (value instanceof Error) {
         seen.add(value);
         const result: Record<string, unknown> = {};
-        for (const [key, field] of Object.entries(value)) {
-            result[key] = serializeMetaValue(field, depth + 1, seen);
+        const fields = value as unknown as Record<string, unknown>;
+        for (const key of ERROR_FIELDS) {
+            if (Object.hasOwn(value, key) && fields[key] !== undefined) {
+                result[key] = serializeMetaValue(fields[key], depth + 1, seen);
+            }
         }
         result.name = value.name;
         result.message = value.message;
@@ -55,7 +81,9 @@ export function serializeMetaValue(
         seen.add(value);
         const result: Record<string, unknown> = {};
         for (const [key, field] of Object.entries(value)) {
-            result[key] = serializeMetaValue(field, depth + 1, seen);
+            result[key] = SECRET_KEY.test(key)
+                ? REDACTED
+                : serializeMetaValue(field, depth + 1, seen);
         }
         return result;
     }
@@ -69,7 +97,7 @@ export function serializeMetaValue(
 // enumerable string keys are rewritten.
 const serializeErrors = format((info) => {
     for (const [key, value] of Object.entries(info)) {
-        info[key] = serializeMetaValue(value);
+        info[key] = SECRET_KEY.test(key) ? REDACTED : serializeMetaValue(value);
     }
     return info;
 });

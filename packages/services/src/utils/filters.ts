@@ -54,9 +54,10 @@ export type ListFieldOptions = {
     defaultSorts?: readonly OrderBy[];
     /**
      * Unique field appended to every order so pages are stable when sort values tie. Skipped
-     * when the sorts already include it. Default `{ id: "desc" }`.
+     * when the sorts already include it. Default `{ id: "desc" }`; pass another unique field
+     * for a model without `id`, or `null` to turn it off.
      */
-    tiebreaker?: { field: string; direction: SortDirection };
+    tiebreaker?: { field: string; direction: SortDirection } | null;
     limits?: Partial<ListLimits>;
 };
 
@@ -138,6 +139,11 @@ function asValidation<R>(fn: () => R): R {
     }
 }
 
+const DECIMAL = /^-?\d+(\.\d+)?([eE][-+]?\d+)?$/;
+const EPOCH_MS = /^-?\d+$/;
+/** `2024-01-31`, or a date-time with a zone: `2024-01-31T10:00:00Z`, `...T10:00+08:00`. */
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2}))?$/;
+
 function parseScalar(
     type: FilterFieldType,
     value: unknown,
@@ -156,20 +162,32 @@ function parseScalar(
             return text;
         }
         case "number": {
-            const parsed = typeof value === "number" ? value : Number(value);
-            if (typeof value === "boolean" || value === "" || !Number.isFinite(parsed)) {
-                fail(path, "Number filter values must be finite numbers");
-            }
+            // Strings must be plain decimals: Number() also reads " " as 0 and "0x10" as 16.
+            const parsed =
+                typeof value === "number"
+                    ? value
+                    : typeof value === "string" && DECIMAL.test(value)
+                      ? Number(value)
+                      : Number.NaN;
+            if (!Number.isFinite(parsed)) fail(path, "Number filter values must be finite numbers");
             return parsed;
         }
         case "date": {
+            // ISO 8601 with an explicit zone when a time is given, or epoch milliseconds, so the
+            // result never depends on the server's time zone.
             const parsed =
                 value instanceof Date
                     ? value
-                    : typeof value === "number" || typeof value === "string"
+                    : typeof value === "number"
                       ? new Date(value)
-                      : new Date(Number.NaN);
-            if (Number.isNaN(parsed.getTime())) fail(path, "Date filter values must be valid");
+                      : typeof value === "string" && EPOCH_MS.test(value)
+                        ? new Date(Number(value))
+                        : typeof value === "string" && ISO_DATE.test(value)
+                          ? new Date(value)
+                          : new Date(Number.NaN);
+            if (Number.isNaN(parsed.getTime())) {
+                fail(path, "Date filter values must be ISO 8601 dates or epoch milliseconds");
+            }
             return parsed;
         }
         case "boolean":
@@ -235,7 +253,8 @@ function arrayCondition(
     const parsed = values.map((entry, index) =>
         parseScalar(type, entry, `${path}.value.${index}`, limits)
     );
-    return { [operator]: parsed };
+    const mode = type === "text" && field.caseInsensitive ? { mode: "insensitive" } : {};
+    return { [operator]: parsed, ...mode };
 }
 
 function filterClause(
@@ -390,8 +409,9 @@ export function parseListRouteInput(input: ListRouteInput, options: ListFieldOpt
 
         const requested = parseSorts(input.sorts ?? [], options.sortFields, limits);
         const sorts = requested.length ? requested : [...(options.defaultSorts ?? [])];
-        const tiebreaker = options.tiebreaker ?? DEFAULT_TIEBREAKER;
-        if (!sorts.some((sort) => Object.hasOwn(sort, tiebreaker.field))) {
+        const tiebreaker =
+            options.tiebreaker === undefined ? DEFAULT_TIEBREAKER : options.tiebreaker;
+        if (tiebreaker && !sorts.some((sort) => Object.hasOwn(sort, tiebreaker.field))) {
             sorts.push({ [tiebreaker.field]: tiebreaker.direction });
         }
 

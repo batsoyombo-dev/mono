@@ -41,7 +41,14 @@ describe("prepareJobData", () => {
         }),
         dated: z.object({ at: z.date() }),
         coerced: z.object({ at: z.coerce.date() }),
+        optional: z.object({ a: z.string() }).optional(),
     };
+
+    test("a missing payload is validated as {}, which is what BullMQ stores", () => {
+        expect(() => prepareJobData("default", schemas, "optional", undefined)).toThrow(
+            ValidationError
+        );
+    });
 
     test("stores the caller's input, not the parsed output", () => {
         expect(prepareJobData("default", schemas, "greet", { name: "Ada" })).toEqual({

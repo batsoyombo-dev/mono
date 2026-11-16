@@ -95,13 +95,31 @@ describe("errorHandler", () => {
         expect(await proc.nextExit()).toBe(1);
     });
 
-    test("terminates only once", async () => {
-        const { proc } = setup();
+    test("runs shutdown once; a crash during shutdown raises the exit code to 1", async () => {
+        const { proc, handler } = setup();
+        let runs = 0;
+        handler.registerShutdownHandler(async () => {
+            runs += 1;
+            await tick();
+        });
+
         proc.emit("SIGTERM");
         proc.emit("uncaughtException", new Error("late"));
         await proc.nextExit();
         await tick();
-        expect(proc.exits).toEqual([0]);
+
+        expect(runs).toBe(1);
+        expect(proc.exits).toEqual([1]);
+    });
+
+    test("a second signal during shutdown exits 1 at once", async () => {
+        const { proc, handler } = setup();
+        handler.registerShutdownHandler(() => new Promise<void>(() => {}));
+
+        proc.emit("SIGINT");
+        proc.emit("SIGINT");
+
+        expect(await proc.nextExit()).toBe(1);
     });
 
     test("rejects an invalid shutdownTimeoutMs", () => {

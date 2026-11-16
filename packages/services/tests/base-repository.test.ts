@@ -56,6 +56,20 @@ describe("BaseRepository soft delete", () => {
         ]);
     });
 
+    test("soft deleteMany keeps options such as limit", async () => {
+        const { repo, calls } = setup();
+
+        await repo.deleteMany({ where: { userId: 1 }, limit: 100 });
+
+        expect(calls).toHaveLength(1);
+        expect(calls[0]?.method).toBe("updateMany");
+        expect(calls[0]?.args).toMatchObject({
+            where: { userId: 1, deletedAt: null },
+            limit: 100,
+            data: { deletedAt: expect.any(Date) },
+        });
+    });
+
     test("groupBy skips soft-deleted rows", async () => {
         const { repo, calls } = setup();
 

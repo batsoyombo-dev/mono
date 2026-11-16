@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { defaultLogLevel, runtimeConfig } from "@mono/env/runtime";
+import { defaultLogLevel, logLevel, runtimeConfig } from "@mono/env/runtime";
 
 import { formatPrettyLine, logger, serializeMetaValue } from "../src";
 
@@ -25,6 +25,29 @@ describe("serializeMetaValue", () => {
             cause: { name: "Error", message: "socket closed" },
         });
         expect(typeof serialized?.stack).toBe("string");
+    });
+
+    test("never copies secrets from errors or secret-looking keys", () => {
+        // ioredis attaches the failed command, AUTH password included, to reply errors.
+        const error = Object.assign(new Error("WRONGPASS invalid username-password pair"), {
+            command: { name: "hello", args: ["3", "AUTH", "default", "SuperSecretPw"] },
+            config: { headers: { Authorization: "Bearer abc" } },
+            code: "WRONGPASS",
+        });
+
+        const result = serializeMetaValue({
+            error,
+            user: { email: "a@example.com", password: "hunter2", apiKey: "k" },
+        });
+        const text = JSON.stringify(result);
+
+        expect(text).not.toContain("SuperSecretPw");
+        expect(text).not.toContain("Bearer abc");
+        expect(text).not.toContain("hunter2");
+        expect(result).toMatchObject({
+            error: { code: "WRONGPASS", message: "WRONGPASS invalid username-password pair" },
+            user: { email: "a@example.com", password: "[redacted]", apiKey: "[redacted]" },
+        });
     });
 
     test("renders BigInt as a string", () => {
@@ -75,6 +98,8 @@ describe("log level", () => {
         // `bun test` sets NODE_ENV=test; the root `test` script loads no .env.
         expect(runtimeConfig.NODE_ENV).toBe("test");
         expect(defaultLogLevel).toBe("warn");
+        expect(logLevel.parse(undefined)).toBe("warn");
+        expect(logLevel.parse("debug")).toBe("debug");
         expect(logger.level).toBe(runtimeConfig.LOG_LEVEL);
     });
 });

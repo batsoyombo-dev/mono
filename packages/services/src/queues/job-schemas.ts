@@ -31,7 +31,8 @@ export function parseJobData(queueName: string, schemas: JobSchemas, name: strin
 
 /** The payload as the worker will read it back from Redis (BullMQ stores JSON). */
 function toWire(name: string, data: unknown): unknown {
-    if (data === undefined) return undefined;
+    // BullMQ stores a missing payload as `{}`, so validate what the worker will actually see.
+    if (data === undefined) return {};
     try {
         return JSON.parse(JSON.stringify(data)) as unknown;
     } catch {

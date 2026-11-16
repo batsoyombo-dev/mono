@@ -70,17 +70,15 @@ const boundariesRule = {
                 properties: {
                     allowed: { type: "array", items: { type: "string" } },
                     message: { type: "string" },
-                    forbidden: {
-                        type: "array",
-                        items: {
-                            type: "object",
-                            properties: {
-                                path: { type: "string" },
-                                message: { type: "string" },
-                            },
-                            required: ["path", "message"],
-                            additionalProperties: false,
+                    // Workspace-relative module ids (no extension) relative imports must stay in.
+                    within: {
+                        type: "object",
+                        properties: {
+                            paths: { type: "array", items: { type: "string" } },
+                            message: { type: "string" },
                         },
+                        required: ["paths", "message"],
+                        additionalProperties: false,
                     },
                 },
                 required: ["allowed", "message"],
@@ -91,12 +89,12 @@ const boundariesRule = {
             restricted: "'{{source}}' is not allowed here. {{message}}",
             outside:
                 "'{{source}}' reaches outside this workspace. Import the other workspace by its @mono/* name instead. {{message}}",
-            forbidden: "'{{source}}' is not allowed here. {{message}}",
+            within: "'{{source}}' is outside the files this layer may import. {{message}}",
         },
     },
 
     create(context) {
-        const { allowed, message, forbidden = [] } = context.options[0];
+        const { allowed, message, within } = context.options[0];
         const allowedRegex = new RegExp(`^(?:${allowed.join("|") || "(?!)"})$`);
         const filename = context.filename;
         const root = path.isAbsolute(filename) ? workspaceRootOf(filename) : null;
@@ -119,7 +117,10 @@ const boundariesRule = {
             if (!root || !(source.startsWith(".") || source.startsWith("/"))) return;
 
             const resolved = path.resolve(path.dirname(filename), source);
-            if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+            // `../../node_modules/@mono/database` stays inside the workspace on disk but is a
+            // symlink to another package, so any relative path through node_modules is out.
+            const viaNodeModules = source.split(/[\\/]/).includes("node_modules");
+            if (viaNodeModules || (resolved !== root && !resolved.startsWith(root + path.sep))) {
                 context.report({
                     node: sourceNode,
                     messageId: "outside",
@@ -128,17 +129,15 @@ const boundariesRule = {
                 return;
             }
 
-            if (forbidden.length === 0) return;
+            if (!within) return;
             const id = moduleIdOf(resolved, root);
-            for (const entry of forbidden) {
-                if (id === entry.path || id.startsWith(`${entry.path}/`)) {
-                    context.report({
-                        node: sourceNode,
-                        messageId: "forbidden",
-                        data: { source, message: entry.message },
-                    });
-                    return;
-                }
+            const inside = within.paths.some((entry) => id === entry || id.startsWith(`${entry}/`));
+            if (!inside) {
+                context.report({
+                    node: sourceNode,
+                    messageId: "within",
+                    data: { source, message: within.message },
+                });
             }
         }
 

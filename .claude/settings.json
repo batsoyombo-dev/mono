@@ -30,7 +30,11 @@
             "Bash(git branch -a)",
             "Bash(git branch --list*)"
         ],
-        "ask": ["Bash(bun run test:integration)", "Bash(bun run db:deploy)"],
+        "ask": [
+            "Bash(bun run test:integration)",
+            "Bash(bun run db:deploy)",
+            "Bash(bun test *integration*)"
+        ],
         "deny": [
             "Read(./.env)",
             "Read(./.env.local)",

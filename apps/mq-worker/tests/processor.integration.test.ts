@@ -55,6 +55,9 @@ afterAll(async () => {
 });
 
 /** Polls until the job reaches the failed state, i.e. BullMQ gave up on it. */
+// Below TEST_TIMEOUT_MS, so a slow run fails with this helper's message, not bun's timeout.
+const TEST_TIMEOUT_MS = 20_000;
+
 async function waitForFailed(jobId: string, timeoutMs = 10_000) {
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
@@ -66,34 +69,46 @@ async function waitForFailed(jobId: string, timeoutMs = 10_000) {
 }
 
 describe("job processor in a BullMQ worker (Redis)", () => {
-    test("a 4xx-mapped handler error fails the job after one attempt", async () => {
-        const added = await queue.add("fail", { kind: "not-found" });
+    test(
+        "a 4xx-mapped handler error fails the job after one attempt",
+        async () => {
+            const added = await queue.add("fail", { kind: "not-found" });
 
-        const job = await waitForFailed(String(added.id));
+            const job = await waitForFailed(String(added.id));
 
-        expect(runs.get(String(added.id))).toBe(1);
-        expect(job.attemptsMade).toBe(1);
-        expect(job.failedReason).toBe("NotFoundError: User not found");
-        // The original stack is kept, pointing at the handler that threw.
-        expect((job.stacktrace ?? []).join("\n")).toContain("processor.integration.test.ts");
-    });
+            expect(runs.get(String(added.id))).toBe(1);
+            expect(job.attemptsMade).toBe(1);
+            expect(job.failedReason).toBe("NotFoundError: User not found");
+            // The original stack is kept, pointing at the handler that threw.
+            expect((job.stacktrace ?? []).join("\n")).toContain("processor.integration.test.ts");
+        },
+        TEST_TIMEOUT_MS
+    );
 
-    test("a generic error is retried until the attempts run out", async () => {
-        const added = await queue.add("fail", { kind: "crash" });
+    test(
+        "a generic error is retried until the attempts run out",
+        async () => {
+            const added = await queue.add("fail", { kind: "crash" });
 
-        const job = await waitForFailed(String(added.id));
+            const job = await waitForFailed(String(added.id));
 
-        expect(runs.get(String(added.id))).toBe(ATTEMPTS);
-        expect(job.attemptsMade).toBe(ATTEMPTS);
-        expect(job.failedReason).toBe("SMTP down");
-    });
+            expect(runs.get(String(added.id))).toBe(ATTEMPTS);
+            expect(job.attemptsMade).toBe(ATTEMPTS);
+            expect(job.failedReason).toBe("SMTP down");
+        },
+        TEST_TIMEOUT_MS
+    );
 
-    test("an invalid payload fails without retries and never reaches the handler", async () => {
-        const added = await queue.add("fail", { kind: "unknown" });
+    test(
+        "an invalid payload fails without retries and never reaches the handler",
+        async () => {
+            const added = await queue.add("fail", { kind: "unknown" });
 
-        const job = await waitForFailed(String(added.id));
+            const job = await waitForFailed(String(added.id));
 
-        expect(runs.has(String(added.id))).toBe(false);
-        expect(job.attemptsMade).toBe(1);
-    });
+            expect(runs.has(String(added.id))).toBe(false);
+            expect(job.attemptsMade).toBe(1);
+        },
+        TEST_TIMEOUT_MS
+    );
 });

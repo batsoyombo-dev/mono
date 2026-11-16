@@ -24,6 +24,29 @@ export const envAccessSyntax = [
             "ImportDeclaration[source.value=/^(node:)?process$/] > :matches(ImportNamespaceSpecifier, ImportDefaultSpecifier[local.name!='process'])",
         message: `Import \`process\` under its own name (or use the global) so env reads stay visible to lint. ${ENV_MESSAGE}`,
     },
+    // import { env } from "bun"; import * as bun from "bun"; import bun from "bun"
+    {
+        selector:
+            "ImportDeclaration[source.value='bun'] > :matches(ImportSpecifier[imported.name='env'], ImportNamespaceSpecifier, ImportDefaultSpecifier)",
+        message: `Import named helpers from "bun" (not \`env\`, a namespace or the default). ${ENV_MESSAGE}`,
+    },
+    // globalThis["process"].env, globalThis["process"]["env"]
+    {
+        selector:
+            "MemberExpression[object.type='MemberExpression'][object.object.name=/^(globalThis|global|self|window)$/][object.property.value=/^(process|Bun)$/]:matches([property.name='env'], [property.value='env'])",
+        message: ENV_MESSAGE,
+    },
+    // Reflect.get(process, "env")
+    {
+        selector:
+            "CallExpression[callee.object.name='Reflect'][callee.property.name='get'][arguments.0.name=/^(process|Bun)$/]",
+        message: ENV_MESSAGE,
+    },
+    // const p = process; (aliases hide later `.env` reads)
+    {
+        selector: "VariableDeclarator[init.type='Identifier'][init.name=/^(process|Bun)$/]",
+        message: `Don't alias \`process\`/\`Bun\`. ${ENV_MESSAGE}`,
+    },
     // import.meta.env
     {
         selector: "MemberExpression[object.type='MetaProperty'][property.name='env']",

@@ -81,14 +81,15 @@ export const envGroups = {
         MAIL_PASSWORD: optional(z.string()),
         /**
          * `ssl`: implicit TLS. `starttls`: plain connection upgraded with STARTTLS (required).
-         * `none`/`false`: no TLS. `true`/`tls`/`1` (default): `ssl` on port 465, else `starttls`.
+         * `false`/`0`: STARTTLS when the server offers it. `none`: never TLS.
+         * `true`/`tls`/`1` (default): `ssl` on port 465, else `starttls`.
          */
         MAIL_ENCRYPTION: z
             .enum(["true", "false", "1", "0", "tls", "ssl", "starttls", "none"])
             .default("true")
-            .transform((value): "auto" | "ssl" | "starttls" | "none" => {
-                if (value === "ssl" || value === "starttls") return value;
-                return ["false", "0", "none"].includes(value) ? "none" : "auto";
+            .transform((value): "auto" | "ssl" | "starttls" | "opportunistic" | "none" => {
+                if (value === "ssl" || value === "starttls" || value === "none") return value;
+                return value === "false" || value === "0" ? "opportunistic" : "auto";
             }),
         MAIL_FROM_NAME: z.string().min(1),
         MAIL_FROM_ADDRESS: z.email(),

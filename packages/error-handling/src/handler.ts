@@ -41,7 +41,9 @@ export type ErrorHandler = ReturnType<typeof createErrorHandler>;
  *   throw escaped the stack the process state is unknown, even for a trusted `AppError`.
  * - `unhandledRejection`: logs; exits 1 only when the error is untrusted (not an `AppError`
  *   with `isTrusted`, i.e. anything `toAppError` maps to a 500).
- * - `SIGTERM`/`SIGINT`: runs the shutdown handlers and exits 0.
+ * - `SIGTERM`/`SIGINT`: runs the shutdown handlers and exits 0. A second signal while shutting
+ *   down exits 1 at once (press Ctrl+C twice to force-quit).
+ * A crash reported while shutdown is already running raises the exit code to 1.
  * A shutdown handler that rejects turns the exit code into 1. Handlers that run longer than
  * `shutdownTimeoutMs` are abandoned and the process exits 1.
  */
@@ -52,6 +54,8 @@ export function createErrorHandler(deps: ErrorHandlerDeps = {}) {
 
     let isListening = false;
     let isTerminating = false;
+    // The code shutdown will exit with; a crash during a SIGTERM shutdown raises it to 1.
+    let pendingCode = 0;
     let shutdownTimeoutMs = DEFAULT_SHUTDOWN_TIMEOUT_MS;
     const shutdownHandlers = new Set<ShutdownHandler>();
 
@@ -65,20 +69,22 @@ export function createErrorHandler(deps: ErrorHandlerDeps = {}) {
     };
 
     const terminateAndExit = async (exitCode: number) => {
+        pendingCode = Math.max(pendingCode, exitCode);
         if (isTerminating) return;
         isTerminating = true;
 
         // Never hang forever on a stuck handler; the orchestrator would SIGKILL us anyway.
+        // Deliberately not unref()'d: it keeps the event loop alive, so the process cannot drain
+        // and exit 0 on its own while a handler awaits a promise that holds no handle.
         const timeout = setTimeout(() => {
             safeLogError("Graceful shutdown timed out, forcing exit", { shutdownTimeoutMs });
             proc.exit(1);
         }, shutdownTimeoutMs);
-        timeout.unref();
 
         const results = await Promise.allSettled(
             Array.from(shutdownHandlers, async (handler) => handler())
         );
-        let finalCode = exitCode;
+        let finalCode = pendingCode;
         for (const result of results) {
             if (result.status === "rejected") {
                 safeLogError("Shutdown handler failed", { error: result.reason });
@@ -115,6 +121,11 @@ export function createErrorHandler(deps: ErrorHandlerDeps = {}) {
 
             for (const signal of ["SIGTERM", "SIGINT"] as const) {
                 proc.on(signal, () => {
+                    if (isTerminating) {
+                        safeLogError(`Received ${signal} again, exiting without waiting`, {});
+                        proc.exit(1);
+                        return;
+                    }
                     logger.info(`Received ${signal}, shutting down`);
                     void terminateAndExit(0);
                 });

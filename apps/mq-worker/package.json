@@ -20,6 +20,7 @@
         "@mono/services": "*",
         "@mono/utils": "*",
         "bullmq": "catalog:",
+        "cron-parser": "5.10.1",
         "zod": "catalog:"
     },
     "devDependencies": {

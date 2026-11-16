@@ -69,8 +69,9 @@ const SCOPED = {
             ],
             allowed: ["error-handling", "logger", "services/[^/]+/(schema|types)", "utils"],
             reason: "The request layer receives services and config through createApp(), so tests run without a database or .env.",
-            // Workspace-relative module ids (no extension; a directory means its index).
-            forbidden: ["src/config", "src/index", "src/admin", "src/seed", "src/seeds"],
+            // Relative imports must stay inside the request layer (workspace-relative module ids,
+            // no extension). An allowlist, so a new src/lib/db.ts is out until listed here.
+            within: ["src/app", "src/controllers", "src/plugins", "src/utils", "tests"],
         },
     ],
 };
@@ -81,17 +82,21 @@ function describe(allowed) {
         : "No @mono imports are allowed here.";
 }
 
-function restrict(allowed, message, forbidden = [], forbiddenReason = "") {
+function restrict(allowed, message, within, withinReason = "") {
     return {
         "mono/boundaries": [
             "error",
             {
                 allowed,
                 message,
-                forbidden: forbidden.map((id) => ({
-                    path: id,
-                    message: `${forbiddenReason} See "Dependency rules" in AGENTS.md.`,
-                })),
+                ...(within
+                    ? {
+                          within: {
+                              paths: within,
+                              message: `${withinReason} See "Dependency rules" in AGENTS.md.`,
+                          },
+                      }
+                    : {}),
             },
         ],
     };
@@ -125,13 +130,13 @@ export function boundaries(workspace) {
             rules: restrict(allowed, `${describe(allowed)} See "Dependency rules" in AGENTS.md.`),
         },
         ...(SCOPED[workspace] ?? []).map(
-            ({ allowed: scopedAllowed, reason, forbidden, ...scope }) => ({
+            ({ allowed: scopedAllowed, reason, within, ...scope }) => ({
                 ...scope,
                 rules: restrict(
                     scopedAllowed,
                     `${describe(scopedAllowed)} ${reason} See "Dependency rules" in AGENTS.md.`,
-                    forbidden,
-                    `The request layer may not import the entry point, config, seeds or src/admin. ${reason}`
+                    within,
+                    `The request layer may only import src/app.ts, src/controllers, src/plugins, src/utils and tests (not the entry point, config, seeds or src/admin). ${reason}`
                 ),
             })
         ),

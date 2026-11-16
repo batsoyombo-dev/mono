@@ -38,7 +38,7 @@ describe("defineEnv", () => {
         });
 
         expect(config.MAIL_PORT).toBe(1025);
-        expect(config.MAIL_ENCRYPTION).toBe("none");
+        expect(config.MAIL_ENCRYPTION).toBe("opportunistic");
         expect(config.NODE_ENV).toBe("development");
         expect(config.CORS_ORIGINS).toEqual([]);
         expect(config.EXTRA_ID).toBeUndefined();

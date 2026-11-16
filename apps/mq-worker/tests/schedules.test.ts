@@ -72,6 +72,18 @@ describe("syncSchedules", () => {
         expect(calls).toEqual([]);
     });
 
+    test("an invalid cron pattern or timezone throws before Redis is touched", async () => {
+        const { queue, calls } = fakeQueue(["cron-old"]);
+
+        await expect(
+            sync(queue, [{ ...healthCheck, pattern: "every minute" } as never])
+        ).rejects.toThrow(/invalid pattern/);
+        await expect(
+            sync(queue, [{ ...healthCheck, timezone: "Mars/Olympus" } as never])
+        ).rejects.toThrow(/invalid pattern/);
+        expect(calls).toEqual([]);
+    });
+
     test("an unknown job name or duplicate id throws", async () => {
         const { queue } = fakeQueue([]);
         const unknown = { ...healthCheck, job: { name: "nope", data: {} } };

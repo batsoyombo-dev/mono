@@ -42,7 +42,34 @@ describe("parseFilters", () => {
                 all
             )
         ).toEqual({
-            AND: [{ status: { in: ["ACTIVE", "SUSPENDED"] } }, { code: { notIn: ["A", "B"] } }],
+            AND: [
+                { status: { in: ["ACTIVE", "SUSPENDED"], mode: "insensitive" } },
+                { code: { notIn: ["A", "B"], mode: "insensitive" } },
+            ],
+        });
+    });
+
+    test("number and date values are parsed strictly", () => {
+        const one = (filter: Record<string, unknown>) => () =>
+            parseFilters([filter as Parameters<typeof parseFilters>[0][number]], all);
+
+        for (const value of [" ", "0x10", "1e", "abc", true]) {
+            expect(one({ id: "amount", operator: "equals", value })).toThrow();
+        }
+        expect(one({ id: "amount", operator: "equals", value: "12.5" })()).toEqual({
+            amount: { equals: 12.5 },
+        });
+
+        // Time zone-dependent strings are rejected; ISO with a zone, dates and epochs are fine.
+        for (const value of ["2024-01-01 10:00", "2024-01-01T10:00", "Jan 1 2024", "12/01"]) {
+            expect(one({ id: "createdAt", operator: "gte", value })).toThrow();
+        }
+        const iso = "2024-01-01T10:00:00Z";
+        expect(one({ id: "createdAt", operator: "gte", value: iso })()).toEqual({
+            createdAt: { gte: new Date(iso) },
+        });
+        expect(one({ id: "createdAt", operator: "gte", value: "0" })()).toEqual({
+            createdAt: { gte: new Date(0) },
         });
     });
 
@@ -314,6 +341,7 @@ describe("parseListRouteInput", () => {
             parseListRouteInput({}, { ...options, tiebreaker: { field: "uuid", direction: "asc" } })
                 .sorts
         ).toEqual([{ uuid: "asc" }]);
+        expect(parseListRouteInput({}, { ...options, tiebreaker: null }).sorts).toEqual([]);
     });
 
     test("rejects unknown sort fields", () => {

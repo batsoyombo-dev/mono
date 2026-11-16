@@ -67,11 +67,31 @@ async function main(): Promise<number> {
     const shadow = new URL(base);
     shadow.pathname = `/${shadowName}`;
 
+    const drop = async () => {
+        try {
+            await withAdmin(databaseUrl, `DROP DATABASE IF EXISTS "${shadowName}" WITH (FORCE)`);
+        } catch (error) {
+            // Never let a failed cleanup replace the diff result.
+            const reason = error instanceof Error ? error.message : String(error);
+            process.stderr.write(`db:check: could not drop ${shadowName}: ${reason}\n`);
+        }
+    };
+
+    // Ctrl+C / SIGTERM skip `finally`, so drop the shadow database before exiting (130/143).
+    for (const [signal, code] of [
+        ["SIGINT", 130],
+        ["SIGTERM", 143],
+    ] as const) {
+        process.once(signal, () => {
+            void drop().finally(() => process.exit(code));
+        });
+    }
+
     await withAdmin(databaseUrl, `CREATE DATABASE "${shadowName}"`);
     try {
         return await diff(shadow.toString());
     } finally {
-        await withAdmin(databaseUrl, `DROP DATABASE IF EXISTS "${shadowName}" WITH (FORCE)`);
+        await drop();
     }
 }
 

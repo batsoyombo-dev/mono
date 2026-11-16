@@ -18,11 +18,6 @@ const isUnrecoverable = (error: unknown): error is UnrecoverableError =>
     error instanceof UnrecoverableError ||
     (error instanceof Error && error.name === "UnrecoverableError");
 
-/** True when BullMQ will not retry a job that failed with `error`, whatever its attempts. */
-export function isPermanentError(error: unknown): boolean {
-    return isUnrecoverable(error) || isPermanentStatus(toAppError(error).statusCode);
-}
-
 /** True when this run is the job's last allowed attempt. */
 export function isLastAttempt(job: Pick<Job, "attemptsMade" | "opts">): boolean {
     return job.attemptsMade + 1 >= (job.opts.attempts ?? 1);

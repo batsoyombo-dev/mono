@@ -6,9 +6,13 @@ import { logger } from "@mono/logger";
 
 import { runSeeders, seeders } from "./seeds";
 
-// Seeders create known demo credentials (and .env.example makes the demo user an admin).
-if (config.NODE_ENV === "production" && !process.argv.includes("--allow-production")) {
-    logger.error("Refusing to seed with NODE_ENV=production. Pass --allow-production to override.");
+// Seeders create known demo credentials (and .env.example makes the demo user an admin), so
+// never run them against a deployed environment by accident.
+const deployed = config.NODE_ENV === "production" || config.NODE_ENV === "staging";
+if (deployed && !process.argv.includes("--allow-production")) {
+    logger.error(
+        `Refusing to seed with NODE_ENV=${config.NODE_ENV}. Pass --allow-production to override.`
+    );
     process.exit(1);
 }
 

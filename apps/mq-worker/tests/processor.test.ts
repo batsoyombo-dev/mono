@@ -16,6 +16,7 @@ function fakeJob(name: string, data: unknown) {
         name,
         data,
         attemptsMade: 0,
+        opts: { attempts: 3 },
         log: async (line: string) => {
             logs.push(line);
             return logs.length;

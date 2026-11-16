@@ -1,4 +1,6 @@
 import type { Queue } from "bullmq";
+// The parser BullMQ uses for `pattern` (same version), so a pattern that passes here works there.
+import { CronExpressionParser } from "cron-parser";
 
 import { AppError, ValidationError } from "@mono/error-handling";
 import { logger } from "@mono/logger";
@@ -20,7 +22,10 @@ export type SyncSchedulesOptions<TQueue extends Queues> = {
     schemas: JobSchemas;
 };
 
-/** Validates every schedule first, so a bad entry stops the worker before Redis is touched. */
+/**
+ * Validates every schedule first (id, cron pattern and timezone, payload), so a bad entry stops
+ * the worker before Redis is touched and no sync is left half done.
+ */
 function validateSchedules<TQueue extends Queues>({
     queueName,
     schedules,
@@ -33,10 +38,22 @@ function validateSchedules<TQueue extends Queues>({
         }
         seen.add(id);
 
+        const tz = timezone ?? "UTC";
+        try {
+            // Throws RangeError for an unknown zone, which the cron parser accepts silently.
+            new Intl.DateTimeFormat("en-US", { timeZone: tz });
+            CronExpressionParser.parse(pattern, { tz });
+        } catch (error) {
+            const reason = error instanceof Error ? error.message : String(error);
+            throw new ValidationError(
+                `Schedule "${id}" on queue "${queueName}": invalid pattern "${pattern}" or timezone "${tz}" (${reason})`
+            );
+        }
+
         const name = String(job.name);
         try {
             const data = prepareJobData(queueName, schemas, name, job.data);
-            return { key: schedulerKey(id), pattern, tz: timezone ?? "UTC", name, data };
+            return { key: schedulerKey(id), pattern, tz, name, data };
         } catch (error) {
             if (!(error instanceof AppError)) throw error;
             const issues = error instanceof ValidationError ? error.issues : [];
